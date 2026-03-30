@@ -1,0 +1,405 @@
+/* Mix & match — scoped from Fluentia Learning Module (Ashley); only affects `.fl-mix-lesson` */
+
+.fl-mix-lesson {
+  --mm-bg: #f5f2ec;
+  --mm-surface: #ffffff;
+  --mm-ink: #1a1a2e;
+  --mm-ink-soft: #6b6880;
+  --mm-accent: #2d6be4;
+  --mm-accent-light: #e8effe;
+  --mm-green: #2ecc8a;
+  --mm-green-light: #e3fbf0;
+  --mm-amber: #f5a623;
+  --mm-red: #e84855;
+  --mm-card-border: #e4e0d8;
+  --mm-progress-track: #e4e0d8;
+  --mm-radius: 14px;
+  --mm-radius-sm: 8px;
+  --mm-shadow: 0 2px 12px rgba(26, 26, 46, 0.08);
+  --mm-shadow-hover: 0 8px 28px rgba(26, 26, 46, 0.14);
+
+  font-family: 'DM Sans', var(--fl-font, system-ui, sans-serif);
+  color: var(--mm-ink);
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+.fl-mix-lesson .lesson-card {
+  background: var(--mm-surface);
+  border-radius: 20px;
+  box-shadow: 0 4px 32px rgba(26, 26, 46, 0.1);
+  width: 100%;
+  overflow: hidden;
+}
+
+.fl-mix-lesson .top-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 22px 12px;
+  border-bottom: 1px solid var(--mm-card-border);
+}
+
+.fl-mix-lesson .top-bar-progress-only {
+  justify-content: stretch;
+}
+
+.fl-mix-lesson .top-bar-progress-only .progress-wrap {
+  flex: 1;
+  width: 100%;
+}
+
+.fl-mix-lesson .btn-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid var(--mm-card-border);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--mm-ink);
+  transition:
+    background 0.15s,
+    transform 0.15s;
+  flex-shrink: 0;
+  text-decoration: none;
+  padding: 0;
+}
+
+.fl-mix-lesson .btn-back:hover {
+  background: var(--mm-accent-light);
+  transform: scale(1.08);
+}
+
+.fl-mix-lesson .progress-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fl-mix-lesson .progress-label {
+  font-size: 12px;
+  color: var(--mm-ink-soft);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.fl-mix-lesson .progress-track {
+  flex: 1;
+  height: 8px;
+  background: var(--mm-progress-track);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.fl-mix-lesson .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--mm-green) 0%, #22d68a 100%);
+  border-radius: 99px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fl-mix-lesson .btn-menu {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1.5px solid var(--mm-card-border);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--mm-ink);
+  flex-shrink: 0;
+  flex-direction: column;
+  gap: 4px;
+  transition: background 0.15s;
+  padding: 0;
+}
+
+.fl-mix-lesson .btn-menu:hover {
+  background: var(--mm-accent-light);
+}
+
+.fl-mix-lesson .btn-menu span {
+  display: block;
+  width: 16px;
+  height: 1.5px;
+  background: var(--mm-ink);
+  border-radius: 99px;
+}
+
+.fl-mix-lesson .lesson-body {
+  padding: 28px 28px 32px;
+}
+
+.fl-mix-lesson .topic-tag {
+  font-family: 'Syne', var(--fl-font, system-ui, sans-serif);
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.35;
+  color: var(--mm-accent);
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  margin-bottom: 10px;
+  padding-bottom: 2px;
+}
+
+.fl-mix-lesson .activity-type {
+  font-size: 14px;
+  color: var(--mm-ink-soft);
+  font-weight: 400;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.fl-mix-lesson .activity-type::before {
+  content: '';
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--mm-amber);
+}
+
+.fl-mix-lesson .match-grid {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 24px;
+  width: 100%;
+  min-width: 0;
+}
+
+.fl-mix-lesson .match-card {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  min-height: 5.75rem;
+  border: 1.5px solid var(--mm-card-border);
+  border-radius: var(--mm-radius);
+  background: var(--mm-bg);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: clamp(11px, 2.1vw, 13px);
+  font-weight: 500;
+  color: var(--mm-ink);
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  text-align: center;
+  text-wrap: balance;
+  padding: 14px 8px;
+  user-select: none;
+  font-family: inherit;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  hyphens: auto;
+}
+
+.fl-mix-lesson .match-card:hover:not(:disabled):not(.matched):not(.selected) {
+  border-color: var(--mm-accent);
+  background: var(--mm-accent-light);
+  box-shadow: var(--mm-shadow-hover);
+  transform: translateY(-2px);
+}
+
+.fl-mix-lesson .match-card.selected {
+  border-color: var(--mm-accent);
+  background: var(--mm-accent-light);
+  box-shadow: 0 0 0 3px rgba(45, 107, 228, 0.18);
+  transform: translateY(-1px);
+}
+
+.fl-mix-lesson .match-card.matched {
+  border-color: var(--mm-green);
+  background: var(--mm-green-light);
+  color: #1a7a52;
+  cursor: default;
+  animation: fl-mm-matched-pop 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.fl-mix-lesson .match-card.wrong {
+  border-color: var(--mm-red);
+  background: #fdeef0;
+  animation: fl-mm-shake 0.3s;
+}
+
+@keyframes fl-mm-matched-pop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.07);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes fl-mm-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+.fl-mix-lesson .row-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mm-ink-soft);
+  margin-bottom: 8px;
+}
+
+.fl-mix-lesson .btn-continue {
+  width: 100%;
+  padding: 15px;
+  border-radius: var(--mm-radius);
+  border: none;
+  background: var(--mm-accent);
+  color: white;
+  font-family: 'Syne', var(--fl-font, system-ui, sans-serif);
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.15s,
+    box-shadow 0.15s;
+  box-shadow: 0 4px 14px rgba(45, 107, 228, 0.35);
+}
+
+.fl-mix-lesson .btn-continue:hover:not(:disabled) {
+  background: #1f56c8;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(45, 107, 228, 0.45);
+}
+
+.fl-mix-lesson .btn-continue:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.fl-mix-lesson .btn-continue:disabled {
+  background: var(--mm-card-border);
+  color: var(--mm-ink-soft);
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.fl-mix-lesson .feedback {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--mm-radius-sm);
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  animation: fl-mm-slide-up 0.25s;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.fl-mix-lesson .feedback.show {
+  opacity: 1;
+}
+
+.fl-mix-lesson .feedback.correct-fb {
+  background: var(--mm-green-light);
+  color: #1a7a52;
+}
+
+.fl-mix-lesson .feedback.wrong-fb {
+  background: #fdeef0;
+  color: var(--mm-red);
+}
+
+@keyframes fl-mm-slide-up {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.fl-mix-lesson .score-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--mm-green-light);
+  color: #1a7a52;
+  border-radius: 99px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 20px;
+}
+
+.fl-mix-lesson .mm-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--mm-ink-soft);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.fl-mix-lesson .mm-loading {
+  text-align: center;
+  padding: 2.5rem 1rem;
+  color: var(--mm-ink-soft);
+  font-size: 15px;
+}
+
+.fl-mix-lesson .mm-hint {
+  font-size: 13px;
+  color: var(--mm-ink-soft);
+  margin: -4px 0 20px;
+  line-height: 1.45;
+}
+
+.fl-mix-lesson .mm-footer-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.fl-mix-lesson .mm-text-btn {
+  background: none;
+  border: none;
+  color: var(--mm-accent);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.fl-mix-lesson .mm-text-btn:hover {
+  color: #1f56c8;
+}
