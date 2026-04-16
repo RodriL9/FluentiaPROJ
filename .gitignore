@@ -26,6 +26,11 @@ build/
 *.swo
 *~
 
+# Vite
+.vite/
+**/.vite/
+
+
 # OS
 .DS_Store
 Thumbs.db
