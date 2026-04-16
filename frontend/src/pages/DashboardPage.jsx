@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { getNextOnboardingRoute, getStoredUser } from '../api/auth';
+import { clearStoredUser, deleteMyAccount, getNextOnboardingRoute, getStoredUser, verifyAccountPassword } from '../api/auth';
 import '../styles/mix-match-module.css';
 
 const nav = [
@@ -28,7 +28,6 @@ const nav = [
       { to: '/dashboard/achievements', label: 'Achievement badges', icon: '🏆' },
       { to: '/dashboard/subscription', label: 'Subscription', icon: '🧾' },
       { to: '/dashboard/reminders', label: 'Daily reminders', icon: '⏰' },
-      { to: '/dashboard/level-adjustments', label: 'Level adjustments', icon: '🎯' },
       { to: '/dashboard/retake-placement', label: 'Retake placement', icon: '📝' },
     ],
   },
@@ -213,6 +212,13 @@ export default function DashboardPage() {
   const [mixMatchState, setMixMatchState] = useState(null);
   const [mixMatchFeedback, setMixMatchFeedback] = useState(null);
   const [mixMatchWrongIds, setMixMatchWrongIds] = useState(null);
+  const [showDeleteFlow, setShowDeleteFlow] = useState(false);
+  const [deletePasswordVerified, setDeletePasswordVerified] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteInfo, setDeleteInfo] = useState('');
+  const [verifyDeleteSubmitting, setVerifyDeleteSubmitting] = useState(false);
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
   const mixMatchItemsRef = useRef(null);
   const mixMatchPoolRef = useRef([]);
 
@@ -591,7 +597,6 @@ export default function DashboardPage() {
       '/dashboard/achievements': '/api/achievements/me',
       '/dashboard/subscription': '/api/subscriptions/me',
       '/dashboard/reminders': '/api/notifications',
-      '/dashboard/level-adjustments': '/api/me/level-history',
       '/dashboard/weak-spots': '/api/practice/troubles',
     };
     const endpoint = simple[path];
@@ -770,7 +775,6 @@ export default function DashboardPage() {
     '/dashboard/achievements': 'Achievement Badges',
     '/dashboard/subscription': 'Subscription Management',
     '/dashboard/reminders': 'Daily Reminders',
-    '/dashboard/level-adjustments': 'User Level Adjustments',
     '/dashboard/retake-placement': 'Retake Placement Test',
     '/dashboard/topics': 'Your Topics',
     '/dashboard/weak-spots': 'Weak spots — need more practice',
@@ -2423,6 +2427,143 @@ export default function DashboardPage() {
                         );
                       })()}
                     </div>
+                    <div className="fl-continue-card" style={{ border: '1px solid #fecaca', background: 'linear-gradient(135deg, #fff 0%, #fff1f2 100%)' }}>
+                      <div style={{ width: '100%' }}>
+                        <h3 style={{ margin: 0, color: '#b91c1c' }}>Delete account</h3>
+                        <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
+                          This permanently deletes your account and related data from the system.
+                        </p>
+                        {!showDeleteFlow ? (
+                          <button
+                            type="button"
+                            className="fl-btn fl-btn-outline"
+                            style={{
+                              marginTop: '0.55rem',
+                              width: 'fit-content',
+                              borderColor: '#ef4444',
+                              color: '#b91c1c',
+                              background: '#fff',
+                            }}
+                            onClick={() => {
+                              setShowDeleteFlow(true);
+                              setDeleteError('');
+                              setDeleteInfo('');
+                              setDeletePassword('');
+                              setDeletePasswordVerified(false);
+                            }}
+                          >
+                            Delete account
+                          </button>
+                        ) : null}
+                        {deleteError ? (
+                          <p className="fl-auth-error" style={{ marginTop: '0.55rem' }}>
+                            {deleteError}
+                          </p>
+                        ) : null}
+                        {showDeleteFlow ? (
+                          <form
+                            onSubmit={async (e) => {
+                              e.preventDefault();
+                              setDeleteError('');
+                              setDeleteInfo('');
+                              if (!deletePassword.trim()) {
+                                setDeleteError('Enter your account password.');
+                                return;
+                              }
+                              if (!deletePasswordVerified) {
+                                setVerifyDeleteSubmitting(true);
+                                try {
+                                  await verifyAccountPassword({ userId: user?.id, password: deletePassword });
+                                  setDeletePasswordVerified(true);
+                                  setDeleteInfo('Password verified. You can now confirm deletion.');
+                                } catch (err) {
+                                  setDeleteError(err.message || 'Could not verify password.');
+                                } finally {
+                                  setVerifyDeleteSubmitting(false);
+                                }
+                                return;
+                              }
+                              setDeleteSubmitting(true);
+                              try {
+                                await deleteMyAccount({ userId: user?.id, password: deletePassword });
+                                clearStoredUser();
+                                navigate('/login?accountDeleted=1', { replace: true });
+                              } catch (err) {
+                                setDeleteError(err.message || 'Could not delete account.');
+                              } finally {
+                                setDeleteSubmitting(false);
+                              }
+                            }}
+                            style={{ marginTop: '0.6rem', display: 'grid', gap: '0.55rem', maxWidth: '440px' }}
+                          >
+                            {deleteInfo ? (
+                              <p className="fl-auth-info" style={{ marginTop: 0 }}>
+                                {deleteInfo}
+                              </p>
+                            ) : null}
+                            <div className="fl-field" style={{ marginBottom: 0 }}>
+                              <label htmlFor="delete-account-password">Step 1: Verify your password</label>
+                              <input
+                                id="delete-account-password"
+                                name="deleteAccountPassword"
+                                type="password"
+                                autoComplete="current-password"
+                                value={deletePassword}
+                                onChange={(e) => {
+                                  setDeletePassword(e.target.value);
+                                  setDeletePasswordVerified(false);
+                                  setDeleteInfo('');
+                                }}
+                                placeholder="Enter your password"
+                              />
+                            </div>
+                            {!deletePasswordVerified ? (
+                              <button
+                                type="submit"
+                                className="fl-btn fl-btn-outline"
+                                disabled={verifyDeleteSubmitting}
+                                style={{
+                                  width: 'fit-content',
+                                  borderColor: '#ef4444',
+                                  color: '#b91c1c',
+                                  background: '#fff',
+                                }}
+                              >
+                                {verifyDeleteSubmitting ? 'Verifying…' : 'Verify password'}
+                              </button>
+                            ) : (
+                              <button
+                                type="submit"
+                                className="fl-btn fl-btn-outline"
+                                disabled={deleteSubmitting}
+                                style={{
+                                  width: 'fit-content',
+                                  borderColor: '#ef4444',
+                                  color: '#b91c1c',
+                                  background: '#fff',
+                                }}
+                              >
+                                {deleteSubmitting ? 'Deleting…' : 'Step 2: Confirm delete account'}
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              className="fl-btn fl-btn-outline"
+                              style={{ width: 'fit-content' }}
+                              onClick={() => {
+                                setShowDeleteFlow(false);
+                                setDeletePasswordVerified(false);
+                                setDeletePassword('');
+                                setDeleteError('');
+                                setDeleteInfo('');
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </form>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                 ) : null}
 
@@ -2566,7 +2707,7 @@ export default function DashboardPage() {
                   </div>
                 ) : null}
 
-                {['/dashboard/reminders', '/dashboard/level-adjustments'].includes(path) ? (
+                {['/dashboard/reminders'].includes(path) ? (
                   <div style={{ display: 'grid', gap: '0.75rem' }}>
                     {(items || []).map((it) => (
                       <div key={it.id || `${it.code || it.type || it.title}-${it.sent_at || it.unlocked_at || ''}`} className="fl-continue-card">
@@ -2584,7 +2725,7 @@ export default function DashboardPage() {
                   </div>
                 ) : null}
 
-                {['/dashboard/vocabulary', '/dashboard/grammar', '/dashboard/listening', '/dashboard/conversation', '/dashboard/writing', '/dashboard/achievements', '/dashboard/payments', '/dashboard/reminders', '/dashboard/level-adjustments'].includes(path) &&
+                {['/dashboard/vocabulary', '/dashboard/grammar', '/dashboard/listening', '/dashboard/conversation', '/dashboard/writing', '/dashboard/achievements', '/dashboard/payments', '/dashboard/reminders'].includes(path) &&
                 items.length === 0 ? (
                   <div className="fl-continue-card">
                     <div>

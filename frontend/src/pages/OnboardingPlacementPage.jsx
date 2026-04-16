@@ -258,9 +258,11 @@ export default function OnboardingPlacementPage() {
       <div className="pa-page">
         <header className="pa-navbar">
           <nav className="pa-navbar-actions">
-            <Link to={isRetake ? '/dashboard' : '/'} className="pa-nav-button">
-              {isRetake ? 'Dashboard' : 'Home'}
-            </Link>
+            {isRetake ? (
+              <Link to="/dashboard" className="pa-nav-button">
+                Dashboard
+              </Link>
+            ) : null}
           </nav>
         </header>
 

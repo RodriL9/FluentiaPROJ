@@ -17,6 +17,10 @@ export default function LoginPage() {
       setError('That verification link is invalid or has expired.');
     } else if (searchParams.get('checkEmail') === '1') {
       setInfo('Check your inbox for a verification link. After verifying, sign in here.');
+    } else if (searchParams.get('passwordReset') === '1') {
+      setInfo('Your password has been updated. You can sign in now.');
+    } else if (searchParams.get('accountDeleted') === '1') {
+      setInfo('Your account has been deleted.');
     } else if (searchParams.get('googleError') === '1') {
       setError('Google sign-in failed or was cancelled. You can try again or use email and password.');
     }

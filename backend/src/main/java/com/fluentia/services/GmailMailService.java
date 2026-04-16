@@ -77,6 +77,42 @@ public class GmailMailService {
         log.info("Sent verification email to {}", toEmail);
     }
 
+    public void sendPasswordResetEmail(String toEmail, String resetUrl) throws Exception {
+        if (!isConfigured()) {
+            throw new IllegalStateException("Gmail API credentials are not configured");
+        }
+        FluentiaProperties.Google g = props.getGoogle();
+        String from = g.getGmailFromEmail().trim();
+        String subject = "Reset your Fluentia password";
+        String text =
+                "We received a request to reset your Fluentia password.\r\n\r\nOpen this link to choose a new password:\r\n"
+                        + resetUrl
+                        + "\r\n\r\nThis link expires in 30 minutes. If you did not request a password reset, you can ignore this message.\r\n";
+
+        UserCredentials credentials =
+                UserCredentials.newBuilder()
+                        .setClientId(g.getGmailClientId().trim())
+                        .setClientSecret(g.getGmailClientSecret().trim())
+                        .setRefreshToken(g.getGmailRefreshToken().trim())
+                        .build();
+
+        Gmail gmail =
+                new Gmail.Builder(transport, GsonFactory.getDefaultInstance(), new HttpCredentialsAdapter(credentials))
+                        .setApplicationName("Fluentia")
+                        .build();
+
+        MimeMessage mime = buildMime(from, toEmail, subject, text);
+        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        mime.writeTo(buffer);
+        String encoded =
+                Base64.getUrlEncoder().withoutPadding().encodeToString(buffer.toByteArray());
+
+        Message message = new Message();
+        message.setRaw(encoded);
+        gmail.users().messages().send("me", message).execute();
+        log.info("Sent password reset email to {}", toEmail);
+    }
+
     private static MimeMessage buildMime(String from, String to, String subject, String body) throws Exception {
         Properties p = new Properties();
         Session session = Session.getDefaultInstance(p, null);

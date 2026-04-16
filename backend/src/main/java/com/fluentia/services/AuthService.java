@@ -2,15 +2,20 @@ package com.fluentia.services;
 
 import com.fluentia.config.FluentiaProperties;
 import com.fluentia.dto.AuthUserResponse;
+import com.fluentia.dto.DeleteAccountRequest;
+import com.fluentia.dto.ForgotPasswordRequest;
 import com.fluentia.dto.LoginRequest;
 import com.fluentia.dto.RegisterRequest;
 import com.fluentia.dto.RegisterResponse;
+import com.fluentia.dto.ResetPasswordRequest;
+import com.fluentia.dto.VerifyPasswordRequest;
 import com.fluentia.models.User;
 import com.fluentia.repositories.UserRepository;
 import com.google.api.client.googleapis.auth.oauth2.GoogleIdToken;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -137,6 +142,131 @@ public class AuthService {
     private String buildVerifyLink(String token) {
         String base = props.getApp().getApiPublicBaseUrl().trim().replaceAll("/$", "");
         return base + "/auth/verify-email?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
+    }
+
+    private String buildResetPasswordLink(String token) {
+        String base = props.getApp().getFrontendPublicUrl().trim().replaceAll("/$", "");
+        return base + "/reset-password?token=" + URLEncoder.encode(token, StandardCharsets.UTF_8);
+    }
+
+    @Transactional
+    public void forgotPassword(ForgotPasswordRequest req) {
+        String email = normalizeEmail(req != null ? req.email() : null);
+        if (email.isEmpty() || !email.contains("@")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Enter a valid email address.");
+        }
+        if (!gmailMailService.isConfigured()) {
+            throw new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "Password reset email is not configured. Add GMAIL_OAUTH_CLIENT_ID, "
+                            + "GMAIL_OAUTH_CLIENT_SECRET, GMAIL_OAUTH_REFRESH_TOKEN, and GMAIL_FROM_EMAIL to .env.");
+        }
+
+        Optional<User> maybe = userRepository.findByEmailIgnoreCase(email);
+        if (maybe.isEmpty()) return;
+
+        User user = maybe.get();
+        String token = UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", "");
+        user.setPasswordResetToken(token);
+        user.setPasswordResetExpires(Instant.now().plus(30, ChronoUnit.MINUTES));
+        user.setUpdatedAt(Instant.now());
+        userRepository.save(user);
+
+        String resetLink = buildResetPasswordLink(token);
+        try {
+            gmailMailService.sendPasswordResetEmail(user.getEmail(), resetLink);
+        } catch (Exception e) {
+            log.error("Failed to send password reset email", e);
+            throw new ResponseStatusException(
+                    HttpStatus.INTERNAL_SERVER_ERROR, "Could not send password reset email. Try again later.");
+        }
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest req) {
+        String token = req != null ? trim(req.token()) : "";
+        String password = req != null && req.password() != null ? req.password() : "";
+        if (token.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing reset token.");
+        }
+        if (password.length() < MIN_PASSWORD_LEN) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST, "Password must be at least " + MIN_PASSWORD_LEN + " characters.");
+        }
+
+        User user =
+                userRepository
+                        .findByPasswordResetToken(token)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reset link."));
+
+        Instant expiresAt = user.getPasswordResetExpires();
+        if (expiresAt == null || Instant.now().isAfter(expiresAt)) {
+            throw new ResponseStatusException(HttpStatus.GONE, "This reset link has expired. Request a new one.");
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(password));
+        user.setPasswordResetToken(null);
+        user.setPasswordResetExpires(null);
+        user.setUpdatedAt(Instant.now());
+        userRepository.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public void verifyPassword(VerifyPasswordRequest req) {
+        if (req == null || req.userId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required.");
+        }
+        String password = req.password() != null ? req.password() : "";
+        if (password.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required.");
+        }
+        User user =
+                userRepository
+                        .findById(req.userId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found."));
+        if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "This account does not use a password login. Sign in with your provider and contact support for deletion.");
+        }
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Incorrect password.");
+        }
+    }
+
+    @Transactional
+    public void deleteAccount(DeleteAccountRequest req) {
+        if (req == null || req.userId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId is required.");
+        }
+        String password = req.password() != null ? req.password() : "";
+        if (password.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password is required to delete your account.");
+        }
+
+        User user =
+                userRepository
+                        .findById(req.userId())
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "User not found."));
+
+        if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "This account does not use a password login. Sign in with your provider and contact support for deletion.");
+        }
+        if (!passwordEncoder.matches(password, user.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Incorrect password.");
+        }
+
+        try {
+            userRepository.delete(user);
+            userRepository.flush();
+        } catch (DataIntegrityViolationException e) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Could not delete account due to related records. Please contact support.",
+                    e);
+        }
     }
 
     @Transactional

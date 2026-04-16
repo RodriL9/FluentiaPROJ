@@ -83,6 +83,42 @@ export async function loginWithGoogle(idToken) {
   return res.json();
 }
 
+export async function requestPasswordReset(email) {
+  const res = await fetch('/api/auth/forgot-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function resetPassword({ token, password }) {
+  const res = await fetch('/api/auth/reset-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token, password }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function deleteMyAccount({ userId, password }) {
+  const res = await fetch('/api/auth/delete-account', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, password }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
+export async function verifyAccountPassword({ userId, password }) {
+  const res = await fetch('/api/auth/verify-password', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId, password }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+}
+
 export async function updateUserLanguages(userId, { nativeLanguage, learningLanguage }) {
   const res = await fetch(`/api/users/${userId}/languages`, {
     method: 'PATCH',

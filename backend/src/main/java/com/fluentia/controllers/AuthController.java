@@ -2,11 +2,15 @@ package com.fluentia.controllers;
 
 import com.fluentia.config.FluentiaProperties;
 import com.fluentia.dto.AuthUserResponse;
+import com.fluentia.dto.DeleteAccountRequest;
+import com.fluentia.dto.ForgotPasswordRequest;
 import com.fluentia.dto.GoogleLoginRequest;
 import com.fluentia.dto.LoginRequest;
 import com.fluentia.dto.PublicAuthConfigResponse;
 import com.fluentia.dto.RegisterRequest;
 import com.fluentia.dto.RegisterResponse;
+import com.fluentia.dto.ResetPasswordRequest;
+import com.fluentia.dto.VerifyPasswordRequest;
 import com.fluentia.services.AuthService;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -65,5 +69,25 @@ public class AuthController {
         } catch (Exception e) {
             response.sendRedirect(frontend + "/login?verified=0");
         }
+    }
+
+    @PostMapping("/forgot-password")
+    public void forgotPassword(@RequestBody ForgotPasswordRequest body) {
+        authService.forgotPassword(body);
+    }
+
+    @PostMapping("/reset-password")
+    public void resetPassword(@RequestBody ResetPasswordRequest body) {
+        authService.resetPassword(body);
+    }
+
+    @PostMapping("/delete-account")
+    public void deleteAccount(@RequestBody DeleteAccountRequest body) {
+        authService.deleteAccount(body);
+    }
+
+    @PostMapping("/verify-password")
+    public void verifyPassword(@RequestBody VerifyPasswordRequest body) {
+        authService.verifyPassword(body);
     }
 }
