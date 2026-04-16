@@ -4,13 +4,19 @@ target/
 
 # Node
 node_modules/
+**/node_modules/
 
 # Env files
 .env
+.env.local
+.env.*.local
 application.properties
 
-# Mac
-.DS_Store
+# Build
+dist/
+build/
+.next/
+!.mvn/wrapper/maven-wrapper.jar
 
 # IDE
 .idea/
@@ -19,3 +25,11 @@ application.properties
 *.swp
 *.swo
 *~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
