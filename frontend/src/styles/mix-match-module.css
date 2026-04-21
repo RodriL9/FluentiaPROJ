@@ -1,22 +1,22 @@
 /* Mix & match — scoped from Fluentia Learning Module (Ashley); only affects `.fl-mix-lesson` */
 
 .fl-mix-lesson {
-  --mm-bg: #f5f2ec;
-  --mm-surface: #ffffff;
-  --mm-ink: #1a1a2e;
-  --mm-ink-soft: #6b6880;
-  --mm-accent: #2d6be4;
-  --mm-accent-light: #e8effe;
-  --mm-green: #2ecc8a;
-  --mm-green-light: #e3fbf0;
-  --mm-amber: #f5a623;
-  --mm-red: #e84855;
-  --mm-card-border: #e4e0d8;
-  --mm-progress-track: #e4e0d8;
+  --mm-bg: #1a1a24;
+  --mm-surface: #22222f;
+  --mm-ink: #f0eeff;
+  --mm-ink-soft: #8b8aaa;
+  --mm-accent: #7c6af7;
+  --mm-accent-light: rgba(124,106,247,0.15);
+  --mm-green: #4ade80;
+  --mm-green-light: rgba(74,222,128,0.12);
+  --mm-amber: #fbbf24;
+  --mm-red: #f87171;
+  --mm-card-border: #2e2e3f;
+  --mm-progress-track: #3d3d55;
   --mm-radius: 14px;
   --mm-radius-sm: 8px;
-  --mm-shadow: 0 2px 12px rgba(26, 26, 46, 0.08);
-  --mm-shadow-hover: 0 8px 28px rgba(26, 26, 46, 0.14);
+  --mm-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  --mm-shadow-hover: 0 8px 28px rgba(0,0,0,0.4);
 
   font-family: 'DM Sans', var(--fl-font, system-ui, sans-serif);
   color: var(--mm-ink);
@@ -231,7 +231,7 @@
 
 .fl-mix-lesson .match-card.wrong {
   border-color: var(--mm-red);
-  background: #fdeef0;
+  background: rgba(248,113,113,0.12);
   animation: fl-mm-shake 0.3s;
 }
 
@@ -330,7 +330,7 @@
 }
 
 .fl-mix-lesson .feedback.wrong-fb {
-  background: #fdeef0;
+  background: rgba(248,113,113,0.12);
   color: var(--mm-red);
 }
 

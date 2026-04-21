@@ -2,7 +2,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict 4ScZQXGlhIOGd28FTub6Sp9gqMfIjILkxVAOBX93fSJzPejkJn38TWvXcH2PPRS
+\restrict OkZhv7klSvr3Xia7C9Whdd0Na9tElcKGowNawemvVqVjaC4jLC0cgDrnDewKckH
 
 -- Dumped from database version 14.20 (Homebrew)
 -- Dumped by pg_dump version 14.20 (Homebrew)
@@ -1314,6 +1314,28 @@ CREATE TABLE public.user_learning_preferences (
 ALTER TABLE public.user_learning_preferences OWNER TO rodrigo;
 
 --
+-- Name: user_lesson_catalog_progress; Type: TABLE; Schema: public; Owner: rodrigo
+--
+
+CREATE TABLE public.user_lesson_catalog_progress (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    lesson_number integer NOT NULL,
+    status character varying(20) DEFAULT 'LOCKED'::character varying,
+    score_percentage numeric(5,2),
+    xp_earned integer DEFAULT 0,
+    attempts integer DEFAULT 0,
+    passed boolean DEFAULT false,
+    completed_at timestamp without time zone,
+    started_at timestamp without time zone,
+    CONSTRAINT user_lesson_catalog_progress_lesson_number_check CHECK (((lesson_number >= 1) AND (lesson_number <= 7))),
+    CONSTRAINT user_lesson_catalog_progress_status_check CHECK (((status)::text = ANY ((ARRAY['LOCKED'::character varying, 'AVAILABLE'::character varying, 'IN_PROGRESS'::character varying, 'COMPLETED'::character varying])::text[])))
+);
+
+
+ALTER TABLE public.user_lesson_catalog_progress OWNER TO rodrigo;
+
+--
 -- Name: user_lesson_progress; Type: TABLE; Schema: public; Owner: rodrigo
 --
 
@@ -1397,6 +1419,29 @@ CREATE TABLE public.user_topics (
 
 
 ALTER TABLE public.user_topics OWNER TO rodrigo;
+
+--
+-- Name: user_trouble_items; Type: TABLE; Schema: public; Owner: rodrigo
+--
+
+CREATE TABLE public.user_trouble_items (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    language character varying(5) NOT NULL,
+    section character varying(30) NOT NULL,
+    reference_type character varying(30),
+    reference_id uuid,
+    topic_tag character varying(50),
+    label_snapshot character varying(255),
+    dedupe_key character varying(120) NOT NULL,
+    wrong_count integer DEFAULT 1 NOT NULL,
+    last_wrong_at timestamp without time zone DEFAULT now(),
+    created_at timestamp without time zone DEFAULT now(),
+    updated_at timestamp without time zone DEFAULT now()
+);
+
+
+ALTER TABLE public.user_trouble_items OWNER TO rodrigo;
 
 --
 -- Name: user_word_memory; Type: TABLE; Schema: public; Owner: rodrigo
@@ -2125,6 +2170,22 @@ ALTER TABLE ONLY public.user_learning_preferences
 
 
 --
+-- Name: user_lesson_catalog_progress user_lesson_catalog_progress_pkey; Type: CONSTRAINT; Schema: public; Owner: rodrigo
+--
+
+ALTER TABLE ONLY public.user_lesson_catalog_progress
+    ADD CONSTRAINT user_lesson_catalog_progress_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: user_lesson_catalog_progress user_lesson_catalog_progress_user_id_lesson_number_key; Type: CONSTRAINT; Schema: public; Owner: rodrigo
+--
+
+ALTER TABLE ONLY public.user_lesson_catalog_progress
+    ADD CONSTRAINT user_lesson_catalog_progress_user_id_lesson_number_key UNIQUE (user_id, lesson_number);
+
+
+--
 -- Name: user_lesson_progress user_lesson_progress_pkey; Type: CONSTRAINT; Schema: public; Owner: rodrigo
 --
 
@@ -2170,6 +2231,22 @@ ALTER TABLE ONLY public.user_skills
 
 ALTER TABLE ONLY public.user_topics
     ADD CONSTRAINT user_topics_pkey PRIMARY KEY (user_id, topic_id);
+
+
+--
+-- Name: user_trouble_items user_trouble_items_dedupe_uq; Type: CONSTRAINT; Schema: public; Owner: rodrigo
+--
+
+ALTER TABLE ONLY public.user_trouble_items
+    ADD CONSTRAINT user_trouble_items_dedupe_uq UNIQUE (user_id, language, dedupe_key);
+
+
+--
+-- Name: user_trouble_items user_trouble_items_pkey; Type: CONSTRAINT; Schema: public; Owner: rodrigo
+--
+
+ALTER TABLE ONLY public.user_trouble_items
+    ADD CONSTRAINT user_trouble_items_pkey PRIMARY KEY (id);
 
 
 --
@@ -2690,6 +2767,13 @@ CREATE INDEX idx_subscriptions_active ON public.subscriptions USING btree (user_
 --
 
 CREATE INDEX idx_subscriptions_expiry ON public.subscriptions USING btree (expires_at) WHERE ((status)::text = 'ACTIVE'::text);
+
+
+--
+-- Name: idx_ulcp_user_id; Type: INDEX; Schema: public; Owner: rodrigo
+--
+
+CREATE INDEX idx_ulcp_user_id ON public.user_lesson_catalog_progress USING btree (user_id);
 
 
 --
@@ -3324,6 +3408,14 @@ ALTER TABLE ONLY public.user_learning_preferences
 
 
 --
+-- Name: user_lesson_catalog_progress user_lesson_catalog_progress_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: rodrigo
+--
+
+ALTER TABLE ONLY public.user_lesson_catalog_progress
+    ADD CONSTRAINT user_lesson_catalog_progress_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: user_lesson_progress user_lesson_progress_lesson_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: rodrigo
 --
 
@@ -3396,6 +3488,14 @@ ALTER TABLE ONLY public.user_topics
 
 
 --
+-- Name: user_trouble_items user_trouble_items_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: rodrigo
+--
+
+ALTER TABLE ONLY public.user_trouble_items
+    ADD CONSTRAINT user_trouble_items_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
 -- Name: user_word_memory user_word_memory_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: rodrigo
 --
 
@@ -3439,5 +3539,5 @@ ALTER TABLE ONLY public.xp_history
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 4ScZQXGlhIOGd28FTub6Sp9gqMfIjILkxVAOBX93fSJzPejkJn38TWvXcH2PPRS
+\unrestrict OkZhv7klSvr3Xia7C9Whdd0Na9tElcKGowNawemvVqVjaC4jLC0cgDrnDewKckH
 

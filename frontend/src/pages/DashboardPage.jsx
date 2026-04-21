@@ -1,212 +1,80 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { clearStoredUser, deleteMyAccount, getNextOnboardingRoute, getStoredUser, verifyAccountPassword } from '../api/auth';
+import LessonsPage from './LessonsPage';
+import LessonDetailPage from './LessonDetailPage';
+import ExercisesPage from './ExercisesPage';
+import TopicsPage from './TopicsPage';
 import '../styles/mix-match-module.css';
 
-const nav = [
-  { section: 'Profile', items: [{ to: '/dashboard', label: 'Overview', icon: '🏠', matchExact: true }] },
-  {
-    section: 'Your learning',
-    items: [
-      { to: '/dashboard/topics', label: 'Topics', icon: '📚' },
-      { to: '/dashboard/vocabulary', label: 'Vocabulary', icon: '🧩' },
-      { to: '/dashboard/grammar', label: 'Grammar', icon: '📚' },
-      { to: '/dashboard/listening', label: 'Listening', icon: '🎧' },
-      { to: '/dashboard/conversation', label: 'Conversation', icon: '💬' },
-      { to: '/dashboard/writing', label: 'Writing', icon: '✍️' },
-      { to: '/dashboard/ai-conversation', label: 'AI Conversation', icon: '🤖' },
-      { to: '/dashboard/weak-spots', label: 'Weak spots', icon: '📍' },
-    ],
-  },
-  {
-    section: 'Practice modules',
-    items: [{ to: '/dashboard/mix-match', label: 'Mix & match', icon: '🔗' }],
-  },
-  {
-    section: 'Account & System',
-    items: [
-      { to: '/dashboard/achievements', label: 'Achievement badges', icon: '🏆' },
-      { to: '/dashboard/subscription', label: 'Subscription', icon: '🧾' },
-      { to: '/dashboard/reminders', label: 'Daily reminders', icon: '⏰' },
-      { to: '/dashboard/retake-placement', label: 'Retake placement', icon: '📝' },
-    ],
-  },
+const C = { bg: '#0f0f14', surface: '#1a1a24', card: '#22222f', border: '#2e2e3f', accent: '#7c6af7', accentLight: '#a899ff', accentGlow: 'rgba(124,106,247,0.18)', green: '#4ade80', yellow: '#fbbf24', red: '#f87171', text: '#f0eeff', muted: '#8b8aaa', dim: '#3d3d55' };
+
+const NAV = [
+  { section: 'Profile', items: [{ to: '/dashboard', label: '🏠 Home', exact: true }] },
+  { section: 'Your Learning', items: [{ to: '/dashboard/lessons', label: '📖 Lessons' }, { to: '/dashboard/topics', label: '🗂️ Topics' }, { to: '/dashboard/exercises', label: '🏋️ Exercises' }, { to: '/dashboard/ai-conversation', label: '🤖 AI Conversation' }, { to: '/dashboard/weak-spots', label: '📍 Weak Spots' }] },
+  { section: 'Account', items: [{ to: '/dashboard/achievements', label: '🏆 Achievements' }, { to: '/dashboard/subscription', label: '💳 Subscription' }, { to: '/dashboard/retake-placement', label: '🎚️ Level Adjust' }] },
 ];
 
-function navItemActive(pathname, item) {
-  if (item.matchExact) return pathname === item.to || pathname === `${item.to}/`;
-  return pathname === item.to || pathname.startsWith(`${item.to}/`);
+const isActive = (pathname, item) => item.exact ? pathname === item.to || pathname === item.to + '/' : pathname === item.to || pathname.startsWith(item.to + '/');
+const fmtLevel = v => String(v || '').toLowerCase().replace(/_/g, ' ').replace(/\b\w/g, m => m.toUpperCase());
+const fmtTopic = raw => String(raw || '').replace(/_ES|_EN/, '').replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, m => m.toUpperCase());
+const parseCsv = csv => String(csv || '').split(',').map(s => s.trim()).filter(Boolean);
+const display = raw => String(raw ?? '').replace(/_/g, ' ').trim();
+const stripU = raw => String(raw ?? '').replace(/_/g, ' ');
+const truncate = (v, max = 200) => { const s = String(v || '').trim(); return s.length <= max ? s : s.slice(0, max) + '...'; };
+const topicIcon = (catalog, code) => { const r = (catalog || []).find(t => (t.code || '').toUpperCase() === String(code || '').toUpperCase()); return r?.icon?.trim() || '📚'; };
+function shuffle(arr) { const a = [...arr]; for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function pickD(items, cur, field) { const vals = (items || []).map(x => String(x?.[field] || '').trim()).filter(x => x && x !== String(cur || '').trim()); return vals.length ? vals[Math.floor(Math.random() * vals.length)] : 'Not sure'; }
+function mmFields(row) { if (!row) return null; const w = String(row.word ?? '').trim(), t = String(row.translation ?? '').trim(); if (!w || !t) return null; return { contentId: row.id ?? null, word: row.word, translation: row.translation, topic_tag: row.topic_tag ?? '' }; }
+function parseThresholds(t) { if (!t) return []; try { const r = typeof t === 'string' ? JSON.parse(t) : t; return (Array.isArray(r?.levels) ? r.levels : []).map(Number).filter(v => Number.isFinite(v) && v > 0); } catch { return []; } }
+
+const cardS = { background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: 24 };
+const btnS = (v = 'primary') => ({ padding: v === 'sm' ? '8px 16px' : '12px 24px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: v === 'sm' ? 13 : 14, transition: 'all 0.15s', background: v === 'primary' ? C.accent : v === 'ghost' ? 'transparent' : C.card, color: v === 'primary' ? '#fff' : v === 'ghost' ? C.muted : C.text, ...(v === 'ghost' ? { border: `1px solid ${C.border}` } : {}) });
+const badgeS = (color = C.accent) => ({ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: `${color}22`, color, border: `1px solid ${color}44`, display: 'inline-block' });
+
+function TopStats({ level, xp, streak }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
+      <span style={badgeS(C.accentLight)}>{fmtLevel(level) || 'Beginner'}</span>
+      <span style={badgeS(C.yellow)}>XP: {xp}</span>
+      <span style={badgeS(C.green)}>🔥 {streak} days</span>
+    </div>
+  );
 }
 
-function formatLevel(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replaceAll('_', ' ')
-    .replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-function formatLanguage(code) {
-  const map = { es: 'Spanish', en: 'English', fr: 'French', pt: 'Portuguese', it: 'Italian', de: 'German' };
-  return map[String(code || '').toLowerCase()] || String(code || '').toUpperCase();
-}
-
-function parseTopicsCsv(csv) {
-  return String(csv || '')
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
-function formatTopicLabel(raw) {
-  return String(raw || '')
-    .replaceAll('_', ' ')
-    .toLowerCase()
-    .replace(/\b\w/g, (m) => m.toUpperCase());
-}
-
-/** Show API values in the UI without underscores; keeps longer phrases readable. */
-function choiceDisplayText(raw) {
-  return String(raw ?? '').replaceAll('_', ' ').trim();
-}
-
-function stripUnderscoresOnly(raw) {
-  return String(raw ?? '').replaceAll('_', ' ');
-}
-
-function troubleItemSummary(t) {
-  if (t.detail_word) return `${choiceDisplayText(t.detail_word)} → ${choiceDisplayText(t.detail_translation || '')}`;
-  if (t.detail_phrase) return `${choiceDisplayText(t.detail_phrase)} → ${choiceDisplayText(t.detail_phrase_translation || '')}`;
-  if (t.detail_grammar_title) return stripUnderscoresOnly(t.detail_grammar_title);
-  if (t.detail_template_title) return stripUnderscoresOnly(t.detail_template_title);
-  if (t.detail_reading_title) return stripUnderscoresOnly(t.detail_reading_title);
-  if (t.label_snapshot) return stripUnderscoresOnly(t.label_snapshot);
-  if (t.topic_tag) return formatTopicLabel(t.topic_tag);
-  return 'Practice item';
-}
-
-function topicIconFromCatalog(catalog, code) {
-  const row = (catalog || []).find((t) => (t.code || '').toUpperCase() === String(code || '').toUpperCase());
-  const icon = row?.icon != null ? String(row.icon).trim() : '';
-  return icon || '📚';
-}
-
-function tutorWelcomeMessage(learningLanguage) {
-  const lang = String(learningLanguage || 'es').toLowerCase();
-  if (lang.startsWith('en')) {
-    return "Hi! I'm your English tutor—ask me anything you want to learn.";
-  }
-  return "Hi! I'm your Spanish tutor—ask me anything you want to learn.";
-}
-
-function parseThresholdLevels(thresholds) {
-  if (!thresholds) return [];
-  try {
-    const raw = typeof thresholds === 'string' ? JSON.parse(thresholds) : thresholds;
-    const levels = Array.isArray(raw?.levels) ? raw.levels : [];
-    return levels.map((v) => Number(v)).filter((v) => Number.isFinite(v) && v > 0);
-  } catch {
-    return [];
-  }
-}
-
-function jsonPreview(item) {
-  return JSON.stringify(item, null, 2);
-}
-
-function truncateText(value, max = 180) {
-  const s = String(value || '').trim();
-  if (s.length <= max) return s;
-  return `${s.slice(0, max)}...`;
-}
-
-function shuffleArray(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-/** One vocabulary entry for mix & match: `word` (L2) ↔ `translation` (same row from /api/vocabulary). */
-function vocabularyMixMatchFields(row) {
-  if (!row || typeof row !== 'object') return null;
-  const word = String(row.word ?? '').trim();
-  const translation = String(row.translation ?? '').trim();
-  if (!word || !translation) return null;
-  return {
-    contentId: row.id != null ? row.id : null,
-    word: row.word,
-    translation: row.translation,
-    topic_tag: row.topic_tag ?? row.topicTag ?? '',
-  };
-}
-
-function pickDistractor(items, currentValue, field) {
-  const vals = (items || [])
-    .map((x) => String(x?.[field] || '').trim())
-    .filter((x) => x && x !== String(currentValue || '').trim());
-  if (!vals.length) return 'Not sure';
-  return vals[Math.floor(Math.random() * vals.length)];
-}
-
-function levelRank(raw) {
-  const v = String(raw || '').toUpperCase();
-  if (v.includes('BEGINNER')) return 1;
-  if (v.includes('ELEMENTARY')) return 2;
-  if (v.includes('INTERMEDIATE') && !v.includes('UPPER')) return 3;
-  if (v.includes('UPPER_INTERMEDIATE')) return 4;
-  if (v.includes('ADVANCED')) return 5;
-  return 3;
+function ProgressBar({ val = 0, total = 100 }) {
+  const pct = total > 0 ? Math.min(100, Math.round((val / total) * 100)) : 0;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ flex: 1, height: 8, borderRadius: 99, background: C.dim }}>
+        <div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: `linear-gradient(90deg, ${C.accent}, ${C.accentLight})` }} />
+      </div>
+      <span style={{ fontSize: 12, color: C.muted }}>{val}/{total}</span>
+    </div>
+  );
 }
 
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const user = useMemo(() => getStoredUser(), [pathname]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [skillLive, setSkillLive] = useState(null);
+  const path = pathname.replace(/\/+$/, '');
+
+  const [xp, setXp] = useState(0);
+  const [streak, setStreak] = useState(0);
   const [items, setItems] = useState([]);
   const [topicsData, setTopicsData] = useState([]);
   const [topicsCatalog, setTopicsCatalog] = useState([]);
-  const [xp, setXp] = useState(0);
-  const [streak, setStreak] = useState(1);
-  const [completedKeys, setCompletedKeys] = useState({});
-  const [sectionProgress, setSectionProgress] = useState({
-    vocabulary: 0,
-    grammar: 0,
-    listening: 0,
-    conversation: 0,
-    writing: 0,
-    topics: 0,
-    mixMatch: 0,
-  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [activeTopicCode, setActiveTopicCode] = useState('');
   const [activeTopicView, setActiveTopicView] = useState('vocabulary');
   const [flashcardIndex, setFlashcardIndex] = useState(0);
   const [flippedCards, setFlippedCards] = useState({});
+  const [sectionQuiz, setSectionQuiz] = useState({ section: '', index: 0, correct: 0, questions: [], done: false });
   const [checkFeedback, setCheckFeedback] = useState({});
-  const [sectionChecks, setSectionChecks] = useState({
-    vocabulary: { total: 0, correct: 0, finished: false },
-    grammar: { total: 0, correct: 0, finished: false },
-    listening: { total: 0, correct: 0, finished: false },
-    conversation: { total: 0, correct: 0, finished: false },
-    writing: { total: 0, correct: 0, finished: false },
-  });
-  const [sectionQuiz, setSectionQuiz] = useState({
-    section: '',
-    index: 0,
-    correct: 0,
-    questions: [],
-    done: false,
-  });
-  const [quizDifficulty, setQuizDifficulty] = useState('');
   const [aiInput, setAiInput] = useState('');
-  const [aiFeedback, setAiFeedback] = useState(null);
-  const [chatMessages, setChatMessages] = useState(() => [
-    { role: 'assistant', content: tutorWelcomeMessage(getStoredUser()?.learningLanguage) },
-  ]);
+  const [chatMessages, setChatMessages] = useState([{ role: 'assistant', content: "Hi! I'm your Spanish tutor — ask me anything." }]);
   const [chatScrollEl, setChatScrollEl] = useState(null);
   const [mixMatchRound, setMixMatchRound] = useState(0);
   const [mixMatchState, setMixMatchState] = useState(null);
@@ -219,2526 +87,374 @@ export default function DashboardPage() {
   const [deleteInfo, setDeleteInfo] = useState('');
   const [verifyDeleteSubmitting, setVerifyDeleteSubmitting] = useState(false);
   const [deleteSubmitting, setDeleteSubmitting] = useState(false);
+  const [retakeConfirm, setRetakeConfirm] = useState(false);
   const mixMatchItemsRef = useRef(null);
   const mixMatchPoolRef = useRef([]);
 
-  const sendAiMessage = async () => {
-    const userMessage = aiInput.trim();
-    if (!userMessage) return;
-    setChatMessages((prev) => [...prev, { role: 'user', content: userMessage }]);
-    const res = await fetch('/api/ai/conversation/feedback', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        userId: user?.id,
-        language: user?.learningLanguage || 'es',
-        userMessage,
-      }),
-    });
-    if (!res.ok) {
-      setChatMessages((prev) => [
-        ...prev,
-        { role: 'assistant', content: 'I could not respond right now. Please try again.' },
-      ]);
-      return;
-    }
-    const data = await res.json();
-    setAiFeedback(data);
-    setChatMessages((prev) => [...prev, { role: 'assistant', content: data.assistantReply || '' }]);
-    setAiInput('');
-    recordPracticeAttempt({
-      section: 'conversation',
-      correct: true,
-      source: 'ai_conversation_practice',
-      topicTag: '',
-    });
-  };
+  const selectedTopics = useMemo(() => parseCsv(user?.learningGoals), [user?.learningGoals]);
+  const activeTopic = useMemo(() => topicsData.find(t => t.code === activeTopicCode) || null, [topicsData, activeTopicCode]);
+  const [currentLesson, setCurrentLesson] = useState(null);
 
-  useEffect(() => {
-    const next = getNextOnboardingRoute(user);
-    if (next !== '/dashboard') {
-      navigate(next, { replace: true });
-    }
-  }, [navigate, user]);
+  useEffect(() => { const next = getNextOnboardingRoute(user); if (next !== '/dashboard') navigate(next, { replace: true }); }, [navigate, user]);
+
+ useEffect(() => {
+  if (!user?.id) return;
+  fetch(`/api/me/summary?userId=${encodeURIComponent(user.id)}`).then(r => r.ok ? r.json() : null).then(d => { if (d) { setXp(Number(d.xp || 0)); setStreak(Number(d.streak_count || 0)); } }).catch(() => {});
+
+  fetch(`/api/lesson-catalog?userId=${encodeURIComponent(user.id)}`)
+    .then(r => r.ok ? r.json() : [])
+    .then(lessons => {
+      const inProgress = lessons.find(l => l.status === 'IN_PROGRESS');
+      const available = lessons.find(l => l.status === 'AVAILABLE');
+      setCurrentLesson(inProgress || available || null);
+    })
+    .catch(() => {});
+}, [user?.id, pathname]);
 
   useEffect(() => {
     if (!user?.id) return;
-    const language = encodeURIComponent(user.learningLanguage || 'es');
-    let cancelled = false;
-    fetch(`/api/topics?language=${language}`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => {
-        if (!cancelled) setTopicsCatalog(Array.isArray(data) ? data : []);
-      })
-      .catch(() => {
-        if (!cancelled) setTopicsCatalog([]);
-      });
-    return () => {
-      cancelled = true;
-    };
+    fetch(`/api/topics?language=${encodeURIComponent(user.learningLanguage || 'es')}`).then(r => r.ok ? r.json() : []).then(d => setTopicsCatalog(Array.isArray(d) ? d : [])).catch(() => {});
   }, [user?.id, user?.learningLanguage]);
 
   useEffect(() => {
-    if (!user?.id) return;
-    const language = encodeURIComponent(user.learningLanguage || 'es');
-    fetch(`/api/skills/breakdown-live?userId=${encodeURIComponent(user.id)}&language=${language}`)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) setSkillLive(data);
-      })
-      .catch(() => {
-        // Keep dashboard resilient if this widget fails.
-      });
-  }, [user]);
-  const displayName = user?.fullName || user?.username || 'Learner';
-  const initials = displayName
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-  const selectedTopics = useMemo(() => parseTopicsCsv(user?.learningGoals), [user?.learningGoals]);
-  const levelLabel = formatLevel(user?.assignedLevel || 'BEGINNER');
-  const languageLabel = formatLanguage(user?.learningLanguage || 'es');
-  const activeTopic = useMemo(
-    () => topicsData.find((t) => t.code === activeTopicCode) || null,
-    [topicsData, activeTopicCode],
-  );
-  const activeWords = activeTopic?.vocabulary || [];
-  const activePhrases = activeTopic?.phrases || [];
-  const activeUnits = activeTopic?.units || [];
-  const levelGoalXp = (String(user?.assignedLevel || 'BEGINNER').toUpperCase() === 'BEGINNER' ? 120 : 200);
-  const xpPct = Math.min(100, Math.round((xp / levelGoalXp) * 100));
-
-  const sectionKeyFromPath = (p) =>
-    ({
-      '/dashboard/vocabulary': 'vocabulary',
-      '/dashboard/grammar': 'grammar',
-      '/dashboard/listening': 'listening',
-      '/dashboard/conversation': 'conversation',
-      '/dashboard/writing': 'writing',
-      '/dashboard/mix-match': 'mixMatch',
-      '/dashboard/topics': 'topics',
-    })[p] || null;
-
-  const award = (amount, sectionKey, completionKey) => {
-    if (completionKey && completedKeys[completionKey]) return;
-    setXp((v) => v + amount);
-    if (completionKey) {
-      setCompletedKeys((prev) => ({ ...prev, [completionKey]: true }));
-    }
-    if (sectionKey) {
-      setSectionProgress((prev) => ({
-        ...prev,
-        [sectionKey]: Math.min(100, (prev[sectionKey] || 0) + Math.max(6, Math.round(amount / 2))),
-      }));
-    }
-  };
-
-  const recordPracticeAttempt = async ({
-    section,
-    correct = true,
-    source = '',
-    topicTag = '',
-    contentId = null,
-    contentKind = '',
-    labelSnapshot = '',
-  }) => {
-    if (!user?.id) return;
-    try {
-      const body = {
-        userId: user.id,
-        language: user.learningLanguage || 'es',
-        section,
-        correct,
-        source,
-        topicTag,
-      };
-      if (contentId) body.contentId = contentId;
-      if (contentKind) body.contentKind = contentKind;
-      if (labelSnapshot) body.labelSnapshot = labelSnapshot;
-      const res = await fetch('/api/practice/attempt', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      setSkillLive((prev) => ({
-        ...(prev || {}),
-        skills: data.skills || prev?.skills,
-        lessonMix: data.lessonMix || prev?.lessonMix,
-        milestone: data.milestone || prev?.milestone,
-      }));
-    } catch {
-      // Keep UX responsive even if tracking call fails.
-    }
-  };
-
-  const submitKnowledgeCheck = ({
-    section,
-    key,
-    correct,
-    source,
-    topicTag = '',
-    contentId = null,
-    contentKind = '',
-    labelSnapshot = '',
-  }) => {
-    setCheckFeedback((prev) => ({ ...prev, [key]: correct ? 'correct' : 'wrong' }));
-    setSectionChecks((prev) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        total: (prev[section]?.total || 0) + 1,
-        correct: (prev[section]?.correct || 0) + (correct ? 1 : 0),
-      },
-    }));
-    award(correct ? 8 : 2, section, `check-${key}-${correct ? 'c' : 'w'}`);
-    recordPracticeAttempt({
-      section,
-      correct,
-      source,
-      topicTag,
-      contentId,
-      contentKind,
-      labelSnapshot,
-    });
-  };
-
-  const finishSectionCheckpoint = (section) => {
-    const stats = sectionChecks[section] || { total: 0, correct: 0 };
-    const pct = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
-    const passed = pct >= 70;
-    if (passed) {
-      award(25, section, `section-pass-${section}`);
-      recordPracticeAttempt({ section, correct: true, source: 'section_checkpoint_pass' });
-    } else {
-      recordPracticeAttempt({ section, correct: false, source: 'section_checkpoint_fail' });
-    }
-    setSectionChecks((prev) => ({ ...prev, [section]: { ...prev[section], finished: true } }));
-  };
-
-  const getSectionScore = (section) => {
-    const s = skillLive?.skills || {};
-    if (section === 'vocabulary') return Number(s.vocabulary_score ?? 50);
-    if (section === 'grammar') return Number(s.grammar_score ?? 50);
-    if (section === 'listening') return Number(s.listening_score ?? 50);
-    if (section === 'writing') return Number(s.writing_score ?? 50);
-    if (section === 'conversation') return Number(s.speaking_score ?? 50);
-    return 50;
-  };
-
-  const adaptiveQuestionsForSection = (section, sourceItems) => {
-    const rows = Array.isArray(sourceItems) ? sourceItems : [];
-    const score = getSectionScore(section);
-    let band = 'medium';
-    if (score < 60) band = 'easy';
-    else if (score >= 80) band = 'hard';
-
-    const filtered = rows.filter((row) => {
-      const rank = levelRank(row?.level);
-      const freq = Number(row?.frequency_rank ?? 9999);
-      if (band === 'easy') {
-        if (section === 'vocabulary') return rank <= 2 || freq <= 250;
-        return rank <= 2;
-      }
-      if (band === 'hard') {
-        if (section === 'vocabulary') return rank >= 3 || freq >= 300;
-        return rank >= 3;
-      }
-      return rank >= 2 && rank <= 4;
-    });
-
-    const pool = (filtered.length >= 5 ? filtered : rows).slice(0, 20);
-    return { band, pool };
-  };
-
-  const startSectionQuiz = (section, sourceItems) => {
-    const { band, pool } = adaptiveQuestionsForSection(section, sourceItems);
-    const pick = pool.slice(0, Math.min(5, pool.length));
-    const questions = pick.map((row, idx) => {
-      if (section === 'vocabulary') {
-        const right = String(row.translation || '');
-        const wrong = pickDistractor(pool, right, 'translation');
-        return {
-          prompt: `What is "${choiceDisplayText(row.word)}"?`,
-          options: [right, wrong].sort(() => Math.random() - 0.5),
-          correct: right,
-          topicTag: row.topic_tag || '',
-          source: `vocabulary_section_quiz_q${idx + 1}`,
-          contentId: row.id,
-          contentKind: 'VOCABULARY',
-          labelSnapshot: row.word || '',
-        };
-      }
-      if (section === 'grammar') {
-        const right = String(row.category || 'Grammar');
-        const wrong = right === 'Grammar' ? 'Vocabulary' : 'Grammar';
-        return {
-          prompt: `This rule belongs to which area? (${stripUnderscoresOnly(row.title) || formatTopicLabel(row.code || 'rule')})`,
-          options: [right, wrong].sort(() => Math.random() - 0.5),
-          correct: right,
-          topicTag: '',
-          source: `grammar_section_quiz_q${idx + 1}`,
-          contentId: row.id,
-          contentKind: 'GRAMMAR',
-          labelSnapshot: row.title || row.code || '',
-        };
-      }
-      if (section === 'listening') {
-        const right = String(row.translation || '');
-        const wrong = pickDistractor(pool, right, 'translation');
-        return {
-          prompt: `What does "${choiceDisplayText(row.phrase)}" mean?`,
-          options: [right, wrong].sort(() => Math.random() - 0.5),
-          correct: right,
-          topicTag: row.topic_tag || '',
-          source: `listening_section_quiz_q${idx + 1}`,
-          contentId: row.id,
-          contentKind: 'PHRASE',
-          labelSnapshot: row.phrase || '',
-        };
-      }
-      if (section === 'conversation') {
-        const right = String(row.topic_tag || 'General');
-        const wrong = right === 'General' ? 'Travel' : 'General';
-        return {
-          prompt: `Main theme of this conversation: "${stripUnderscoresOnly(row.title) || formatTopicLabel('template')}"`,
-          options: [right, wrong].sort(() => Math.random() - 0.5),
-          correct: right,
-          topicTag: row.topic_tag || '',
-          source: `conversation_section_quiz_q${idx + 1}`,
-          contentId: row.id,
-          contentKind: 'TEMPLATE',
-          labelSnapshot: row.title || '',
-        };
-      }
-      const right = formatLevel(row.level || levelLabel);
-      const wrong = right === 'Beginner' ? 'Advanced' : 'Beginner';
-      return {
-        prompt: `Level of passage "${stripUnderscoresOnly(row.title) || formatTopicLabel('passage')}"?`,
-        options: [right, wrong].sort(() => Math.random() - 0.5),
-        correct: right,
-        topicTag: row.topic_tag || '',
-        source: `writing_section_quiz_q${idx + 1}`,
-        contentId: row.id,
-        contentKind: 'READING',
-        labelSnapshot: row.title || '',
-      };
-    });
-    setSectionQuiz({
-      section,
-      index: 0,
-      correct: 0,
-      questions,
-      done: false,
-    });
-    setQuizDifficulty(band);
-  };
-
-  const answerSectionQuiz = (picked) => {
-    const q = sectionQuiz.questions[sectionQuiz.index];
-    if (!q) return;
-    const correct = picked === q.correct;
-    recordPracticeAttempt({
-      section: sectionQuiz.section,
-      correct,
-      source: q.source,
-      topicTag: q.topicTag || '',
-      contentId: q.contentId || null,
-      contentKind: q.contentKind || '',
-      labelSnapshot: q.labelSnapshot || '',
-    });
-    const nextIndex = sectionQuiz.index + 1;
-    const nextCorrect = sectionQuiz.correct + (correct ? 1 : 0);
-    if (nextIndex >= sectionQuiz.questions.length) {
-      const pct = sectionQuiz.questions.length
-        ? Math.round((nextCorrect / sectionQuiz.questions.length) * 100)
-        : 0;
-      const passed = pct >= 70;
-      if (passed) {
-        award(35, sectionQuiz.section, `section-quiz-pass-${sectionQuiz.section}`);
-      }
-      setSectionQuiz((prev) => ({
-        ...prev,
-        index: nextIndex,
-        correct: nextCorrect,
-        done: true,
-      }));
-      setSectionChecks((prev) => ({
-        ...prev,
-        [sectionQuiz.section]: {
-          ...prev[sectionQuiz.section],
-          total: (prev[sectionQuiz.section]?.total || 0) + sectionQuiz.questions.length,
-          correct: (prev[sectionQuiz.section]?.correct || 0) + nextCorrect,
-          finished: true,
-        },
-      }));
-      return;
-    }
-    setSectionQuiz((prev) => ({
-      ...prev,
-      index: nextIndex,
-      correct: nextCorrect,
-    }));
-  };
-
-  useEffect(() => {
     if (!user) return;
-    const path = pathname.replace(/\/+$/, '');
-    const simple = {
-      '/dashboard/vocabulary': '/api/vocabulary',
-      '/dashboard/mix-match': '/api/vocabulary',
-      '/dashboard/grammar': '/api/grammar',
-      '/dashboard/listening': '/api/phrases',
-      '/dashboard/conversation': '/api/ai/templates',
-      '/dashboard/writing': '/api/reading',
-      '/dashboard/achievements': '/api/achievements/me',
-      '/dashboard/subscription': '/api/subscriptions/me',
-      '/dashboard/reminders': '/api/notifications',
-      '/dashboard/weak-spots': '/api/practice/troubles',
-    };
-    const endpoint = simple[path];
-    if (!endpoint) {
-      setItems([]);
-      setTopicsData([]);
-      setError('');
-      setLoading(false);
-      return;
-    }
+    const endpoints = { '/dashboard/mix-match': '/api/vocabulary', '/dashboard/achievements': '/api/achievements/me', '/dashboard/subscription': '/api/subscriptions/me', '/dashboard/weak-spots': '/api/practice/troubles' };
+    const endpoint = endpoints[path];
+    if (!endpoint && path !== '/dashboard/topics') { setItems([]); setLoading(false); return; }
+    if (path === '/dashboard/topics') return;
     let cancelled = false;
-    setLoading(true);
-    setError('');
-    const language = encodeURIComponent(user.learningLanguage || 'es');
-    const vocabUrl = (applyTopicFilter) =>
-      `${endpoint}?language=${language}&userId=${encodeURIComponent(user.id)}&applyTopicFilter=${applyTopicFilter}`;
-    const primaryUrl =
-      path === '/dashboard/vocabulary'
-        ? vocabUrl(false)
-        : path === '/dashboard/mix-match'
-          ? vocabUrl(true)
-          : `${endpoint}?userId=${encodeURIComponent(user.id)}&language=${language}`;
-    const supportsLanguageFallback = [
-      '/dashboard/vocabulary',
-      '/dashboard/mix-match',
-      '/dashboard/grammar',
-      '/dashboard/listening',
-      '/dashboard/conversation',
-      '/dashboard/writing',
-    ].includes(path);
-    fetch(primaryUrl)
-      .then(async (res) => {
-        if (!res.ok) throw new Error((await res.text()) || 'Failed loading data');
-        return res.json();
-      })
-      .then((data) => {
-        if (cancelled) return;
-        let rows = Array.isArray(data) ? data : [];
-        if (rows.length > 0) {
-          setItems(rows);
-          return;
-        }
-        if (path === '/dashboard/mix-match') {
-          // Widen to full vocabulary list (same words/translations fields), then language-only.
-          return fetch(vocabUrl(false))
-            .then(async (res) => {
-              if (!res.ok) throw new Error((await res.text()) || 'Failed loading data');
-              return res.json();
-            })
-            .then((data2) => {
-              if (cancelled) return;
-              rows = Array.isArray(data2) ? data2 : [];
-              if (rows.length > 0) {
-                setItems(rows);
-                return;
-              }
-              if (!supportsLanguageFallback) {
-                setItems(rows);
-                return;
-              }
-              return fetch(`${endpoint}?language=${language}`)
-                .then(async (res) => {
-                  if (!res.ok) throw new Error((await res.text()) || 'Failed loading data');
-                  return res.json();
-                })
-                .then((fallbackData) => {
-                  if (cancelled) return;
-                  setItems(Array.isArray(fallbackData) ? fallbackData : []);
-                });
-            });
-        }
-        if (!supportsLanguageFallback) {
-          setItems(rows);
-          return;
-        }
-        // Fallback only for learning-content endpoints.
-        return fetch(`${endpoint}?language=${language}`)
-          .then(async (res) => {
-            if (!res.ok) throw new Error((await res.text()) || 'Failed loading data');
-            return res.json();
-          })
-          .then((fallbackData) => {
-            if (cancelled) return;
-            setItems(Array.isArray(fallbackData) ? fallbackData : []);
-          });
-      })
-      .catch((err) => {
-        if (!cancelled) setError(err.message || 'Could not load data.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
+    setLoading(true); setError('');
+    const lang = encodeURIComponent(user.learningLanguage || 'es');
+    const url = path === '/dashboard/mix-match' ? `${endpoint}?language=${lang}&userId=${encodeURIComponent(user.id)}&applyTopicFilter=true` : `${endpoint}?userId=${encodeURIComponent(user.id)}&language=${lang}`;
+    fetch(url).then(r => r.ok ? r.json() : []).then(d => { if (!cancelled) setItems(Array.isArray(d) ? d : []); }).catch(e => { if (!cancelled) setError(e.message); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [pathname, user]);
 
   useEffect(() => {
-    if (!user || pathname.replace(/\/+$/, '') !== '/dashboard/topics') return;
-    let cancelled = false;
-    setLoading(true);
-    setError('');
+    if (!user || path !== '/dashboard/topics') return;
+    let cancelled = false; setLoading(true);
     const lang = encodeURIComponent(user.learningLanguage || 'es');
     (async () => {
       try {
-        const topicRes = await fetch(`/api/topics?language=${lang}`);
-        if (!topicRes.ok) throw new Error('Could not load topics.');
-        const allTopics = await topicRes.json();
+        const allTopics = await fetch(`/api/topics?language=${lang}`).then(r => r.json());
         const list = Array.isArray(allTopics) ? allTopics : [];
-
-        const rows = await Promise.all(
-          selectedTopics.map(async (code) => {
-            const topic = list.find((t) => (t.code || '').toUpperCase() === code.toUpperCase());
-            const iconFallback = topicIconFromCatalog(list, code);
-            if (!topic?.id) {
-              return {
-                code,
-                icon: iconFallback,
-                title: formatTopicLabel(code),
-                vocabulary: [],
-                phrases: [],
-                units: [],
-              };
-            }
-            const contentRes = await fetch(`/api/topics/${topic.id}/content`);
-            if (!contentRes.ok) throw new Error('Could not load topic content.');
-            const content = await contentRes.json();
-            const iconRaw = topic.icon != null ? String(topic.icon).trim() : '';
-            return {
-              code,
-              icon: iconRaw || iconFallback,
-              title: formatTopicLabel(topic.name || topic.code || code),
-              vocabulary: Array.isArray(content.vocabulary) ? content.vocabulary : [],
-              phrases: Array.isArray(content.phrases) ? content.phrases : [],
-              units: Array.isArray(content.units) ? content.units : [],
-            };
-          }),
-        );
-        if (cancelled) return;
-        setTopicsData(rows);
-        const firstCode = rows?.[0]?.code || '';
-        setActiveTopicCode((prev) => (prev && rows.some((r) => r.code === prev) ? prev : firstCode));
-        setActiveTopicView('vocabulary');
-        setFlashcardIndex(0);
-        setFlippedCards({});
-      } catch (err) {
-        if (!cancelled) setError(err.message || 'Could not load topic data.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+        const rows = await Promise.all(selectedTopics.map(async code => {
+          const topic = list.find(t => (t.code || '').toUpperCase() === code.toUpperCase());
+          if (!topic?.id) return { code, icon: topicIcon(list, code), title: fmtTopic(code), vocabulary: [], phrases: [], units: [] };
+          const content = await fetch(`/api/topics/${topic.id}/content`).then(r => r.json());
+          return { code, icon: String(topic.icon || '').trim() || topicIcon(list, code), title: fmtTopic(topic.name || topic.code || code), vocabulary: Array.isArray(content.vocabulary) ? content.vocabulary : [], phrases: Array.isArray(content.phrases) ? content.phrases : [], units: Array.isArray(content.units) ? content.units : [] };
+        }));
+        if (!cancelled) { setTopicsData(rows); setActiveTopicCode(prev => prev && rows.some(r => r.code === prev) ? prev : rows[0]?.code || ''); setFlashcardIndex(0); setFlippedCards({}); }
+      } catch (e) { if (!cancelled) setError(e.message); }
+      finally { if (!cancelled) setLoading(false); }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [pathname, selectedTopics, user]);
 
-  const speakWord = (word, fallbackAudioText) => {
-    if (typeof window === 'undefined' || !window.speechSynthesis) return;
-    const spoken = String(fallbackAudioText || word || '').trim();
-    if (!spoken) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(spoken);
-    utter.lang = String(user?.learningLanguage || 'es').toLowerCase() === 'es' ? 'es-ES' : 'en-US';
-    utter.rate = 0.95;
-    window.speechSynthesis.speak(utter);
-  };
-
-  const path = pathname.replace(/\/+$/, '');
-  const pageTitle = {
-    '/dashboard/vocabulary': 'Vocabulary',
-    '/dashboard/grammar': 'Grammar',
-    '/dashboard/listening': 'Listening',
-    '/dashboard/conversation': 'Conversation',
-    '/dashboard/writing': 'Writing',
-    '/dashboard/ai-conversation': 'AI Conversation',
-    '/dashboard/achievements': 'Achievement Badges',
-    '/dashboard/subscription': 'Subscription Management',
-    '/dashboard/reminders': 'Daily Reminders',
-    '/dashboard/retake-placement': 'Retake Placement Test',
-    '/dashboard/topics': 'Your Topics',
-    '/dashboard/weak-spots': 'Weak spots — need more practice',
-    '/dashboard/mix-match': 'Mix & match',
-  }[path];
-
-  const mixMatchProgressPct = useMemo(() => {
-    if (!mixMatchState?.pairs?.length || mixMatchState.tooFew) return 0;
-    const n = mixMatchState.pairs.length;
-    const d = Object.keys(mixMatchState.matched || {}).length;
-    return Math.min(100, Math.round((d / n) * 100));
-  }, [mixMatchState]);
-
   useEffect(() => {
-    if (!chatScrollEl) return;
-    chatScrollEl.scrollTop = chatScrollEl.scrollHeight;
-  }, [chatMessages, chatScrollEl]);
-
-  useEffect(() => {
-    if (path !== '/dashboard/mix-match') {
-      setMixMatchState(null);
-      return;
-    }
-    const normalized = (items || []).map(vocabularyMixMatchFields).filter(Boolean);
+    if (path !== '/dashboard/mix-match') { setMixMatchState(null); return; }
+    const normalized = (items || []).map(mmFields).filter(Boolean);
     const cap = 5;
-    if (normalized.length < 3) {
-      mixMatchPoolRef.current = [];
-      mixMatchItemsRef.current = null;
-      setMixMatchState({
-        pairs: [],
-        leftOrder: [],
-        rightOrder: [],
-        matched: {},
-        pick: null,
-        tooFew: true,
-      });
-      return;
-    }
-
-    if (mixMatchItemsRef.current !== items) {
-      mixMatchItemsRef.current = items;
-      mixMatchPoolRef.current = shuffleArray(normalized);
-    }
-
+    if (normalized.length < 3) { setMixMatchState({ pairs: [], leftOrder: [], rightOrder: [], matched: {}, pick: null, tooFew: true }); return; }
+    if (mixMatchItemsRef.current !== items) { mixMatchItemsRef.current = items; mixMatchPoolRef.current = shuffle(normalized); }
     let pool = mixMatchPoolRef.current;
-    if (pool.length !== normalized.length) {
-      mixMatchPoolRef.current = shuffleArray(normalized);
-      pool = mixMatchPoolRef.current;
-    }
-
     const chunkCount = Math.max(1, Math.ceil(pool.length / cap));
     const chunkIdx = mixMatchRound % chunkCount;
-    if (chunkIdx === 0 && mixMatchRound > 0) {
-      mixMatchPoolRef.current = shuffleArray(normalized);
-      pool = mixMatchPoolRef.current;
-    }
-    const start = chunkIdx * cap;
-    let picked = pool.slice(start, Math.min(start + cap, pool.length));
-
-    if (picked.length < 3) {
-      mixMatchPoolRef.current = shuffleArray(normalized);
-      pool = mixMatchPoolRef.current;
-      picked = pool.slice(0, Math.min(cap, pool.length));
-    }
-
-    const pairs = picked.map((w) => ({
-      id: String(w.contentId != null ? w.contentId : `${w.word}-${w.topic_tag || 'x'}`),
-      contentId: w.contentId ?? null,
-      word: w.word,
-      translation: w.translation,
-      topic_tag: w.topic_tag || '',
-    }));
-    const ids = pairs.map((p) => p.id);
-    setMixMatchState({
-      pairs,
-      leftOrder: shuffleArray(ids),
-      rightOrder: shuffleArray(ids),
-      matched: {},
-      pick: null,
-      tooFew: false,
-    });
+    if (chunkIdx === 0 && mixMatchRound > 0) { mixMatchPoolRef.current = shuffle(normalized); pool = mixMatchPoolRef.current; }
+    let picked = pool.slice(chunkIdx * cap, Math.min((chunkIdx + 1) * cap, pool.length));
+    if (picked.length < 3) { mixMatchPoolRef.current = shuffle(normalized); pool = mixMatchPoolRef.current; picked = pool.slice(0, Math.min(cap, pool.length)); }
+    const pairs = picked.map(w => ({ id: String(w.contentId ?? `${w.word}-${w.topic_tag || 'x'}`), contentId: w.contentId ?? null, word: w.word, translation: w.translation, topic_tag: w.topic_tag || '' }));
+    const ids = pairs.map(p => p.id);
+    setMixMatchState({ pairs, leftOrder: shuffle(ids), rightOrder: shuffle(ids), matched: {}, pick: null, tooFew: false });
   }, [path, items, mixMatchRound]);
 
-  useEffect(() => {
-    setMixMatchFeedback(null);
-    setMixMatchWrongIds(null);
-  }, [mixMatchRound, path]);
+  useEffect(() => { setMixMatchFeedback(null); setMixMatchWrongIds(null); }, [mixMatchRound, path]);
+  useEffect(() => { if (chatScrollEl) chatScrollEl.scrollTop = chatScrollEl.scrollHeight; }, [chatMessages, chatScrollEl]);
 
-  useEffect(() => {
-    if (!mixMatchState || mixMatchState.tooFew || !mixMatchState.pairs?.length) return;
-    const n = mixMatchState.pairs.length;
-    const done = Object.keys(mixMatchState.matched || {}).length;
-    if (done !== n) return;
-    award(20, 'mixMatch', `mix-match-round-done-${mixMatchRound}`);
-  }, [mixMatchState, mixMatchRound]);
+  const mmProgressPct = useMemo(() => { if (!mixMatchState?.pairs?.length || mixMatchState.tooFew) return 0; return Math.min(100, Math.round((Object.keys(mixMatchState.matched || {}).length / mixMatchState.pairs.length) * 100)); }, [mixMatchState]);
 
   const handleMixMatchTap = (side, vocabId) => {
-    setMixMatchState((prev) => {
-      if (!prev || prev.tooFew || !prev.pairs?.length) return prev;
-      if (prev.matched[vocabId]) return prev;
-      if (!prev.pick) {
-        return { ...prev, pick: { side, vocabId } };
-      }
-      if (prev.pick.side === side) {
-        return { ...prev, pick: { side, vocabId } };
-      }
-      const a = prev.pick.vocabId;
-      const b = vocabId;
-      const pairA = prev.pairs.find((p) => p.id === a);
-      if (a === b) {
-        queueMicrotask(() => {
-          award(8, 'mixMatch', null);
-          recordPracticeAttempt({
-            section: 'vocabulary',
-            correct: true,
-            source: 'mix_match_pair',
-            topicTag: pairA?.topic_tag || '',
-            contentId: pairA?.contentId ?? null,
-            contentKind: 'VOCABULARY',
-            labelSnapshot: String(pairA?.word || ''),
-          });
-          setMixMatchFeedback({ kind: 'correct', text: 'Nice match!' });
-          window.setTimeout(() => setMixMatchFeedback(null), 2000);
-        });
-        return {
-          ...prev,
-          matched: { ...prev.matched, [a]: true },
-          pick: null,
-        };
-      }
-      const firstPair = prev.pairs.find((p) => p.id === a);
-      queueMicrotask(() => {
-        award(2, 'mixMatch', null);
-        recordPracticeAttempt({
-          section: 'vocabulary',
-          correct: false,
-          source: 'mix_match_mismatch',
-          topicTag: firstPair?.topic_tag || '',
-          contentId: firstPair?.contentId ?? null,
-          contentKind: 'VOCABULARY',
-          labelSnapshot: String(firstPair?.word || ''),
-        });
-        setMixMatchWrongIds([a, b]);
-        setMixMatchFeedback({ kind: 'wrong', text: 'Not a pair — try again.' });
-        window.setTimeout(() => setMixMatchWrongIds(null), 550);
-        window.setTimeout(() => setMixMatchFeedback(null), 2400);
-      });
+    setMixMatchState(prev => {
+      if (!prev || prev.tooFew || !prev.pairs?.length || prev.matched[vocabId]) return prev;
+      if (!prev.pick) return { ...prev, pick: { side, vocabId } };
+      if (prev.pick.side === side) return { ...prev, pick: { side, vocabId } };
+      const a = prev.pick.vocabId, b = vocabId;
+      if (a === b) { queueMicrotask(() => { setMixMatchFeedback({ kind: 'correct', text: 'Nice match!' }); window.setTimeout(() => setMixMatchFeedback(null), 2000); }); return { ...prev, matched: { ...prev.matched, [a]: true }, pick: null }; }
+      queueMicrotask(() => { setMixMatchWrongIds([a, b]); setMixMatchFeedback({ kind: 'wrong', text: 'Not a pair — try again.' }); window.setTimeout(() => setMixMatchWrongIds(null), 550); window.setTimeout(() => setMixMatchFeedback(null), 2400); });
       return { ...prev, pick: null };
     });
   };
 
+  const speakWord = (word, fallback) => { if (!window.speechSynthesis) return; window.speechSynthesis.cancel(); const utt = new SpeechSynthesisUtterance(String(fallback || word || '')); utt.lang = String(user?.learningLanguage || 'es').toLowerCase() === 'es' ? 'es-ES' : 'en-US'; utt.rate = 0.95; window.speechSynthesis.speak(utt); };
+
+  const sendAiMessage = async () => {
+    const msg = aiInput.trim(); if (!msg) return;
+    setChatMessages(prev => [...prev, { role: 'user', content: msg }]); setAiInput('');
+    try { const res = await fetch('/api/ai/conversation/feedback', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user?.id, language: user?.learningLanguage || 'es', userMessage: msg }) }); const data = res.ok ? await res.json() : null; setChatMessages(prev => [...prev, { role: 'assistant', content: data?.assistantReply || 'I could not respond right now.' }]); }
+    catch { setChatMessages(prev => [...prev, { role: 'assistant', content: 'I could not respond right now.' }]); }
+  };
+
+  const startQuiz = (section, sourceItems) => {
+    const pool = (sourceItems || []).slice(0, 20);
+    const pick = pool.slice(0, Math.min(5, pool.length));
+    const questions = pick.map((row) => {
+      if (section === 'vocabulary') { const right = String(row.translation || ''); return { prompt: `What does "${display(row.word)}" mean?`, options: [right, pickD(pool, right, 'translation')].sort(() => Math.random() - 0.5), correct: right }; }
+      if (section === 'listening') { const right = String(row.translation || ''); return { prompt: `What does "${display(row.phrase)}" mean?`, options: [right, pickD(pool, right, 'translation')].sort(() => Math.random() - 0.5), correct: right }; }
+      const right = String(row.category || 'Grammar'); return { prompt: `"${stripU(row.title || row.code || 'rule')}" belongs to?`, options: [right, right === 'Grammar' ? 'Vocabulary' : 'Grammar'].sort(() => Math.random() - 0.5), correct: right };
+    });
+    setSectionQuiz({ section, index: 0, correct: 0, questions, done: false });
+  };
+
+  const answerQuiz = (picked) => {
+    const q = sectionQuiz.questions[sectionQuiz.index]; if (!q) return;
+    const correct = picked === q.correct;
+    const nextIndex = sectionQuiz.index + 1;
+    const nextCorrect = sectionQuiz.correct + (correct ? 1 : 0);
+    if (nextIndex >= sectionQuiz.questions.length) { setSectionQuiz(prev => ({ ...prev, index: nextIndex, correct: nextCorrect, done: true })); return; }
+    setSectionQuiz(prev => ({ ...prev, index: nextIndex, correct: nextCorrect }));
+  };
+
+  const recordAttempt = async ({ section, correct, source, labelSnapshot = '' }) => {
+    if (!user?.id) return;
+    try { await fetch('/api/practice/attempt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user.id, language: user.learningLanguage || 'es', section, correct, source, labelSnapshot }) }); } catch {}
+  };
+
   return (
-    <div className="fl-dash">
-      <aside className="fl-dash-sidebar">
-        {nav.map((group) => (
-          <div key={group.section}>
-            <div className="fl-dash-nav-section">{group.section}</div>
-            {group.items.map((item) => (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={`fl-dash-nav-item${navItemActive(pathname, item) ? ' fl-active' : ''}`}
-              >
-                <span aria-hidden>{item.icon}</span>
-                {item.label}
-              </Link>
-            ))}
-          </div>
-        ))}
-        <div className="fl-dash-logout-wrap">
-          <Link to="/" className="fl-dash-logout">
-            <span aria-hidden>←</span>
-            Log out
-          </Link>
-        </div>
-      </aside>
+    <>
+      <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600;700;800&display=swap" rel="stylesheet" />
+      <div style={{ display: 'flex', height: '100vh', fontFamily: "'DM Sans', sans-serif", background: C.bg, color: C.text, overflow: 'hidden' }}>
 
-      <main className="fl-dash-main">
-        <header className="fl-dash-header">
-          <div className="fl-dash-greet">
-            <div className="fl-dash-greet-top">
-              <div className="fl-avatar" aria-hidden>
-                {initials}
-              </div>
-              <div className="fl-dash-greet-text">
-                <h1>Welcome back, {displayName}!</h1>
-                <div className="fl-dash-greet-row">
-                  <span className="fl-badge fl-badge-beginner">{levelLabel}</span>
-                  <span className="fl-badge fl-badge-lang">{languageLabel}</span>
-                  <span className="fl-badge fl-badge-lang">XP {xp}</span>
-                  <span className="fl-badge fl-badge-lang">Streak {streak}🔥</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {path !== '/dashboard/mix-match' ? (
-          <div className="fl-continue-card" style={{ marginBottom: '0.9rem' }}>
-            <div style={{ width: '100%' }}>
-              <h3 style={{ margin: 0 }}>Daily Mission</h3>
-              <p style={{ marginTop: '0.35rem' }}>
-                Earn {levelGoalXp} XP today to lock your {levelLabel} momentum.
-              </p>
-              <div
-                style={{
-                  marginTop: '0.55rem',
-                  width: '100%',
-                  height: '10px',
-                  borderRadius: '999px',
-                  background: 'rgba(99,102,241,0.15)',
-                  overflow: 'hidden',
-                }}
-              >
-                <div
-                  style={{
-                    width: `${xpPct}%`,
-                    height: '100%',
-                    background: 'linear-gradient(90deg,#6366f1,#22c55e)',
-                  }}
-                />
-              </div>
-              <p className="fl-auth-sub" style={{ marginTop: '0.45rem' }}>
-                {xp}/{levelGoalXp} XP
-              </p>
-            </div>
-          </div>
-        ) : null}
-
-        {path === '/dashboard' && skillLive?.skills ? (
-          <div className="fl-continue-card" style={{ marginBottom: '0.9rem' }}>
-            <div style={{ width: '100%' }}>
-              <h3 style={{ margin: 0 }}>Skill Breakdown</h3>
-              <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                Personalized lesson split based on weak areas.
-              </p>
-              <div style={{ marginTop: '0.55rem', display: 'grid', gap: '0.45rem' }}>
-                <div>Vocabulary: {skillLive.skills.vocabulary_score ?? 50}</div>
-                <div>Grammar: {skillLive.skills.grammar_score ?? 50}</div>
-                <div>Listening: {skillLive.skills.listening_score ?? 50}</div>
-                <div>Writing: {skillLive.skills.writing_score ?? 50}</div>
-                <div>Speaking: {skillLive.skills.speaking_score ?? 50}</div>
-              </div>
-              {skillLive.lessonMix ? (
-                <p style={{ marginTop: '0.6rem' }}>
-                  Plan: Vocab {skillLive.lessonMix.vocabulary}% · Grammar {skillLive.lessonMix.grammar}% · Listening{' '}
-                  {skillLive.lessonMix.listening}% · Writing {skillLive.lessonMix.writing}% · Conversation{' '}
-                  {skillLive.lessonMix.conversation}% · Review {skillLive.lessonMix.review}%
-                </p>
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-
-        {path === '/dashboard' ? (
-          <>
-            <h2 className="fl-section-title">Your chosen topics</h2>
-            <div className="fl-pill-row">
-              {selectedTopics.map((code) => (
-                <span key={code} className="fl-pill">
-                  <span aria-hidden>{topicIconFromCatalog(topicsCatalog, code)}</span>{' '}
-                  {formatTopicLabel(code)}
-                </span>
+        {/* Sidebar */}
+        <div style={{ width: 220, background: C.surface, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column', padding: '16px 0', gap: 2, flexShrink: 0, height: '100vh', overflowY: 'auto' }}>
+          {NAV.map(group => (
+            <div key={group.section}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: C.muted, padding: '14px 24px 4px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{group.section}</div>
+              {group.items.map(item => (
+                <Link key={item.to} to={item.to} style={{ textDecoration: 'none' }}>
+                  <button style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 24px', cursor: 'pointer', border: 'none', width: '100%', background: isActive(pathname, item) ? C.accentGlow : 'transparent', color: isActive(pathname, item) ? C.accentLight : C.muted, borderLeft: isActive(pathname, item) ? `3px solid ${C.accent}` : '3px solid transparent', fontSize: 18, fontWeight: isActive(pathname, item) ? 600 : 400, transition: 'all 0.15s', textAlign: 'left', fontFamily: 'inherit' }}>{item.label}</button>
+                </Link>
               ))}
             </div>
+          ))}
+          <div style={{padding: '8px 0' }}>
+            <button onClick={() => { clearStoredUser(); navigate('/login'); }} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 24px', background: 'transparent', border: 'none', color: C.red, cursor: 'pointer', fontSize: 14, width: '100%', fontFamily: 'inherit' }}>🚪 Log out</button>
+          </div>
+        </div>
 
-            <h2 className="fl-section-title">Choose what to study</h2>
-            <div className="fl-browse-grid">
-              <Link to="/dashboard/vocabulary" className="fl-browse-tile">
-                <span>🧩</span>
-                <span>Vocabulary</span>
-                <span className="fl-auth-sub">{sectionProgress.vocabulary}%</span>
-              </Link>
-              <Link to="/dashboard/grammar" className="fl-browse-tile">
-                <span>📚</span>
-                <span>Grammar</span>
-                <span className="fl-auth-sub">{sectionProgress.grammar}%</span>
-              </Link>
-              <Link to="/dashboard/listening" className="fl-browse-tile">
-                <span>🎧</span>
-                <span>Listening</span>
-                <span className="fl-auth-sub">{sectionProgress.listening}%</span>
-              </Link>
-              <Link to="/dashboard/conversation" className="fl-browse-tile">
-                <span>💬</span>
-                <span>Conversation</span>
-                <span className="fl-auth-sub">{sectionProgress.conversation}%</span>
-              </Link>
-              <Link to="/dashboard/writing" className="fl-browse-tile">
-                <span>✍️</span>
-                <span>Writing</span>
-                <span className="fl-auth-sub">{sectionProgress.writing}%</span>
-              </Link>
-              <Link to="/dashboard/topics" className="fl-browse-tile">
-                <span>{selectedTopics.length ? topicIconFromCatalog(topicsCatalog, selectedTopics[0]) : '📚'}</span>
-                <span>Topics</span>
-                <span className="fl-auth-sub">{sectionProgress.topics}%</span>
-              </Link>
-              <Link to="/dashboard/mix-match" className="fl-browse-tile">
-                <span>🔗</span>
-                <span>Mix & match</span>
-                <span className="fl-auth-sub">{sectionProgress.mixMatch}%</span>
-              </Link>
-            </div>
-          </>
-        ) : (
-          <>
-            {path !== '/dashboard/mix-match' ? (
-              <>
-                <h2 className="fl-section-title">{pageTitle || 'Data'}</h2>
-                <p className="fl-auth-sub" style={{ marginBottom: '0.75rem' }}>
-                  Showing data for {languageLabel} at {levelLabel}.
-                </p>
-              </>
-            ) : null}
-            {error ? <p className="fl-auth-error">{error}</p> : null}
-            {loading && path !== '/dashboard/mix-match' ? <p className="fl-auth-sub">Loading…</p> : null}
-            {path === '/dashboard/topics' && !loading ? (
-              <div style={{ display: 'grid', gap: '0.9rem' }}>
-                <div className="fl-topic-grid">
-                  {topicsData.map((t) => {
-                    const active = activeTopicCode === t.code;
-                    return (
-                      <button
-                        key={t.code}
-                        type="button"
-                        className={`fl-topic-card${active ? ' fl-topic-card-active' : ''}`}
-                        onClick={() => {
-                          setActiveTopicCode(t.code);
-                          setActiveTopicView('vocabulary');
-                          setFlashcardIndex(0);
-                          setFlippedCards({});
-                        }}
-                      >
-                        <div style={{ fontSize: '1.75rem', lineHeight: 1, marginBottom: '0.35rem' }} aria-hidden>
-                          {t.icon || topicIconFromCatalog(topicsCatalog, t.code)}
-                        </div>
-                        <div className="fl-topic-card-title">{t.title}</div>
-                        <div className="fl-topic-card-sub">{t.vocabulary.length} words</div>
-                      </button>
-                    );
-                  })}
-                </div>
+        {/* Main */}
+        <div style={{ flex: 1, overflowY: 'auto', padding: 32, background: C.bg }}>
 
-                {activeTopic ? (
-                  <div className="fl-continue-card">
-                    <div style={{ width: '100%' }}>
-                      <h3 style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexWrap: 'wrap' }}>
-                        <span aria-hidden style={{ fontSize: '1.6rem', lineHeight: 1 }}>
-                          {activeTopic.icon || topicIconFromCatalog(topicsCatalog, activeTopic.code)}
-                        </span>
-                        <span>{activeTopic.title}</span>
-                      </h3>
-                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.45rem' }}>
-                        <button
-                          type="button"
-                          className={`fl-btn ${activeTopicView === 'vocabulary' ? 'fl-btn-primary' : 'fl-btn-outline'}`}
-                          onClick={() => {
-                            setActiveTopicView('vocabulary');
-                            setFlashcardIndex(0);
-                            setFlippedCards({});
-                          }}
-                        >
-                          Vocabulary
-                        </button>
-                        <button
-                          type="button"
-                          className={`fl-btn ${activeTopicView === 'phrases' ? 'fl-btn-primary' : 'fl-btn-outline'}`}
-                          onClick={() => {
-                            setActiveTopicView('phrases');
-                            setFlashcardIndex(0);
-                            setFlippedCards({});
-                          }}
-                        >
-                          Phrases
-                        </button>
-                        <button
-                          type="button"
-                          className={`fl-btn ${activeTopicView === 'units' ? 'fl-btn-primary' : 'fl-btn-outline'}`}
-                          onClick={() => setActiveTopicView('units')}
-                        >
-                          Units
-                        </button>
-                      </div>
-                      {activeTopicView === 'vocabulary' ? (
-                        <>
-                          {(() => {
-                            const current = activeWords[flashcardIndex] || {};
-                            const cardKey = current.id || `${activeTopic.code}-${flashcardIndex}`;
-                            const flipped = Boolean(flippedCards[cardKey]);
-                            return (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => setFlippedCards((prev) => ({ ...prev, [cardKey]: !flipped }))}
-                                  style={{
-                                    marginTop: '0.5rem',
-                                    width: '100%',
-                                    minHeight: '220px',
-                                    borderRadius: '16px',
-                                    border: '1px solid var(--fl-border)',
-                                    background: flipped ? 'rgba(99, 102, 241, 0.08)' : 'var(--fl-surface-soft)',
-                                    padding: '1.25rem',
-                                    textAlign: 'center',
-                                  }}
-                                >
-                                  {!flipped ? (
-                                    <>
-                                      <div style={{ fontSize: '2rem', fontWeight: 800 }}>{choiceDisplayText(current.word)}</div>
-                                      <div style={{ marginTop: '0.4rem', color: 'var(--fl-text-muted)' }}>
-                                        {stripUnderscoresOnly(current.phonetic_guide) || 'Tap to flip'}
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>
-                                        {choiceDisplayText(current.translation)}
-                                      </div>
-                                      <div style={{ marginTop: '0.6rem' }}>
-                                        {stripUnderscoresOnly(current.example_sentence) || 'No example sentence.'}
-                                      </div>
-                                    </>
-                                  )}
-                                </button>
-                                <div style={{ marginTop: '0.7rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      setFlashcardIndex((i) => (i <= 0 ? activeWords.length - 1 : i - 1))
-                                    }
-                                  >
-                                    ← Prev
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                  onClick={() => {
-                                    speakWord(current.word, current.audio_text);
-                                    award(2, 'topics');
-                                      recordPracticeAttempt({
-                                        section: 'vocabulary',
-                                        correct: true,
-                                        source: 'topic_flashcard_pronounce',
-                                        topicTag: activeTopic?.code || '',
-                                        contentId: current.id || null,
-                                        contentKind: 'VOCABULARY',
-                                        labelSnapshot: current.word || '',
-                                      });
-                                  }}
-                                  >
-                                    🔊 Pronounce
-                                  </button>
-                                <button
-                                  type="button"
-                                  className="fl-btn fl-btn-primary"
-                                  onClick={() => {
-                                    award(12, 'topics', `topic-word-${cardKey}`);
-                                    recordPracticeAttempt({
-                                      section: 'vocabulary',
-                                      correct: true,
-                                      source: 'topic_flashcard_mastery',
-                                      topicTag: activeTopic?.code || '',
-                                      contentId: current.id || null,
-                                      contentKind: 'VOCABULARY',
-                                      labelSnapshot: current.word || '',
-                                    });
-                                  }}
-                                >
-                                  +12 XP Learned
-                                </button>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      setFlashcardIndex((i) => (i >= activeWords.length - 1 ? 0 : i + 1))
-                                    }
-                                  >
-                                    Next →
-                                  </button>
-                                  <span className="fl-auth-sub" style={{ marginLeft: 'auto' }}>
-                                    Card {flashcardIndex + 1} / {activeWords.length}
-                                  </span>
-                                </div>
-                              </>
-                            );
-                          })()}
-                        </>
-                      ) : null}
-                      {activeTopicView === 'phrases' ? (
-                        activePhrases.length === 0 ? (
-                          <p style={{ marginTop: '0.75rem' }}>No phrases found for this topic.</p>
-                        ) : (
-                          (() => {
-                            const current = activePhrases[flashcardIndex] || {};
-                            const cardKey = current.id || `${activeTopic.code}-phrase-${flashcardIndex}`;
-                            const flipped = Boolean(flippedCards[cardKey]);
-                            return (
-                              <>
-                                <button
-                                  type="button"
-                                  onClick={() => setFlippedCards((prev) => ({ ...prev, [cardKey]: !flipped }))}
-                                  style={{
-                                    marginTop: '0.5rem',
-                                    width: '100%',
-                                    minHeight: '220px',
-                                    borderRadius: '16px',
-                                    border: '1px solid var(--fl-border)',
-                                    background: flipped ? 'rgba(16, 185, 129, 0.08)' : 'var(--fl-surface-soft)',
-                                    padding: '1.25rem',
-                                    textAlign: 'center',
-                                  }}
-                                >
-                                  {!flipped ? (
-                                    <>
-                                      <div style={{ fontSize: '1.6rem', fontWeight: 800 }}>{choiceDisplayText(current.phrase)}</div>
-                                      <div style={{ marginTop: '0.4rem', color: 'var(--fl-text-muted)' }}>
-                                        Tap to flip
-                                      </div>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <div style={{ fontSize: '1.3rem', fontWeight: 700 }}>
-                                        {choiceDisplayText(current.translation)}
-                                      </div>
-                                      <div style={{ marginTop: '0.6rem' }}>
-                                        {stripUnderscoresOnly(current.context) || 'No context provided.'}
-                                      </div>
-                                    </>
-                                  )}
-                                </button>
-                                <div style={{ marginTop: '0.7rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      setFlashcardIndex((i) => (i <= 0 ? activePhrases.length - 1 : i - 1))
-                                    }
-                                  >
-                                    ← Prev
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() => {
-                                      speakWord(current.phrase, current.audio_text);
-                                      award(2, 'topics');
-                                      recordPracticeAttempt({
-                                        section: 'listening',
-                                        correct: true,
-                                        source: 'topic_phrase_pronounce',
-                                        topicTag: activeTopic?.code || '',
-                                        contentId: current.id || null,
-                                        contentKind: 'PHRASE',
-                                        labelSnapshot: current.phrase || '',
-                                      });
-                                    }}
-                                  >
-                                    🔊 Pronounce
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-primary"
-                                    onClick={() => {
-                                      award(12, 'topics', `topic-phrase-${cardKey}`);
-                                      recordPracticeAttempt({
-                                        section: 'listening',
-                                        correct: true,
-                                        source: 'topic_phrase_mastery',
-                                        topicTag: activeTopic?.code || '',
-                                        contentId: current.id || null,
-                                        contentKind: 'PHRASE',
-                                        labelSnapshot: current.phrase || '',
-                                      });
-                                    }}
-                                  >
-                                    +12 XP Learned
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      setFlashcardIndex((i) => (i >= activePhrases.length - 1 ? 0 : i + 1))
-                                    }
-                                  >
-                                    Next →
-                                  </button>
-                                  <span className="fl-auth-sub" style={{ marginLeft: 'auto' }}>
-                                    Card {flashcardIndex + 1} / {activePhrases.length}
-                                  </span>
-                                </div>
-                              </>
-                            );
-                          })()
-                        )
-                      ) : null}
-                      {activeTopicView === 'units' ? (
-                        activeUnits.length === 0 ? (
-                          <p style={{ marginTop: '0.75rem' }}>No units found for this topic.</p>
-                        ) : (
-                          <div style={{ marginTop: '0.75rem', display: 'grid', gap: '0.65rem' }}>
-                            {activeUnits.map((u) => (
-                              <div
-                                key={u.id || `${u.title}-${u.display_order}`}
-                                style={{
-                                  border: '1px solid var(--fl-border)',
-                                  borderRadius: '12px',
-                                  padding: '0.8rem 0.9rem',
-                                  background: 'var(--fl-surface-soft)',
-                                }}
-                              >
-                                <div style={{ fontWeight: 700 }}>{stripUnderscoresOnly(u.title) || 'Untitled Unit'}</div>
-                                <div className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                                  {stripUnderscoresOnly(u.description) || 'No description'}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
+          {/* HOME */}
+          {path === '/dashboard' && (
+            <div>
+              <h1 style={{ fontSize: 40, fontWeight: 800, marginBottom: 4, letterSpacing: '-0.5px' }}>Welcome back, {user?.username}! 👋</h1>
+              <TopStats level={user?.assignedLevel} xp={xp} streak={streak} />
+              <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
+<div style={{ ...cardS, flex: 1, background: `${C.accent}18`, border: `1px solid ${C.accent}44` }}><div style={{ fontSize: 16, color: C.muted }}>XP to next language level</div><div style={{ fontSize: 22, fontWeight: 700, color: C.accentLight, marginTop: 4 }}>{(() => { const next = [10000, 25000, 50000].find(l => l > xp) || 50000; return `${(next - xp).toLocaleString()} XP`; })()}</div></div>                <div style={{ ...cardS, flex: 1, background: `${C.yellow}18`, border: `1px solid ${C.yellow}44` }}><div style={{ fontSize: 16, color: C.muted }}>XP to next lesson</div><div style={{ fontSize: 22, fontWeight: 700, color: C.yellow, marginTop: 4 }}>Keep going! 🔥</div></div>
               </div>
-            ) : null}
-            {path !== '/dashboard/topics' && !loading ? (
-              <>
-                {path === '/dashboard/vocabulary' ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    <p className="fl-auth-sub">{items.length} words</p>
-                    {items.map((w) => (
-                      <div key={w.id || `${w.word}-${w.topic_tag}`} className="fl-continue-card">
-                        <div style={{ width: '100%' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0 }}>{choiceDisplayText(w.word)}</h3>
-                            <button type="button" className="fl-btn fl-btn-outline" onClick={() => speakWord(w.word, w.audio_text)}>
-                              🔊
-                            </button>
+             <div style={{ ...cardS, marginBottom: 20 }}>
+  <div style={{ fontSize: 13, color: C.muted, marginBottom: 8 }}>Start where you last left off</div>
+  <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 10 }}>
+    {currentLesson
+      ? `Lesson ${currentLesson.lesson_number} — ${currentLesson.title}`
+      : `Core Lessons — ${fmtLevel(user?.assignedLevel || 'BEGINNER')}`}
+  </div>
+  <ProgressBar val={currentLesson ? Math.round(currentLesson.score_percentage || 0) : 0} total={100} />
+  <Link to="/dashboard/lessons"><button style={{ ...btnS(), marginTop: 14 }}>Continue Lesson →</button></Link>
+</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 20 }}>
+                {[{ label: '📖 Lessons', to: '/dashboard/lessons' }, { label: '🗂️ Your Topics', to: '/dashboard/topics' }, { label: '🔀 Mix & Match', to: '/dashboard/mix-match' }].map(({ label, to }) => (
+                  <Link key={to} to={to} style={{ textDecoration: 'none' }}><div style={{ ...cardS, cursor: 'pointer', fontSize: 15, fontWeight: 600, padding: 20, textAlign: 'center', color: C.text }}>{label}</div></Link>
+                ))}
+              </div>
+              <div style={{ ...cardS, marginBottom: 16, background: `${C.red}11`, border: `1px solid ${C.red}33` }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.red, marginBottom: 6 }}>⚠️ Weak Spots</div>
+                <div style={{ fontSize: 14, color: C.muted }}>Check your weak spots section to see what needs more practice.</div>
+              </div>
+              <div style={cardS}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: C.muted, marginBottom: 10 }}>Your Topics</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{selectedTopics.map(code => (<span key={code} style={badgeS(C.accent)}>{topicIcon(topicsCatalog, code)} {fmtTopic(code)}</span>))}</div>
+              </div>
+            </div>
+          )}
+
+          {/* NON-HOME */}
+          {path !== '/dashboard' && (
+            <div>
+              <TopStats level={user?.assignedLevel} xp={xp} streak={streak} />
+              {error && <p style={{ color: C.red, marginBottom: 12 }}>{error}</p>}
+              {loading && path !== '/dashboard/mix-match' && <p style={{ color: C.muted }}>Loading…</p>}
+
+              {/* LESSONS GRID */}
+{path === '/dashboard/lessons' && (
+  <LessonsPage />
+)}
+
+{/* LESSON DETAIL */}
+{path.startsWith('/dashboard/lessons/') && (
+  <LessonDetailPage lessonNumber={path.split('/').pop()} />
+)}
+
+
+              {/* TOPICS */}
+              {path === '/dashboard/topics' && <TopicsPage />}
+
+              {path === '/dashboard/exercises' && <ExercisesPage />}
+{/* AI CONVERSATION */}
+{path === '/dashboard/ai-conversation' && (
+  <div>
+    <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 20, letterSpacing: '-0.5px' }}>AI Conversation</h1>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, maxWidth: 600 }}>
+      <div style={{ ...cardS, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div><div style={{ fontSize: 16, fontWeight: 700, marginBottom: 4 }}>🎙️ Speak with AI Tutor</div><div style={{ fontSize: 13, color: C.muted }}>Have a live voice conversation in Spanish. AI listens and responds.</div></div>
+        <button style={btnS()}>Begin</button>
+      </div>
+      <div style={{ ...cardS, display: 'flex', flexDirection: 'column', height: 420 }}>
+        <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 12 }}>💬 Text AI Tutor</div>
+        <div ref={setChatScrollEl} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, paddingBottom: 10 }}>
+          {chatMessages.map((m, i) => (
+            <div key={i} style={{ alignSelf: m.role === 'user' ? 'flex-end' : 'flex-start', background: m.role === 'user' ? C.accent : C.dim, color: '#fff', padding: '10px 14px', borderRadius: 12, maxWidth: '80%', fontSize: 14 }}>{m.content}</div>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 8, borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+          <input value={aiInput} onChange={e => setAiInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAiMessage(); } }} placeholder="Type in Spanish or English..." style={{ flex: 1, background: C.dim, border: 'none', borderRadius: 10, padding: '10px 14px', color: C.text, fontSize: 14, fontFamily: 'inherit', outline: 'none' }} />
+          <button style={btnS()} onClick={sendAiMessage}>Send</button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
+
+              {/* MIX & MATCH */}
+              {path === '/dashboard/mix-match' && (
+                <div className="fl-mix-lesson">
+                  <div className="lesson-card" id="card-match">
+                    <div className="top-bar top-bar-progress-only"><div className="progress-wrap"><span className="progress-label">0%</span><div className="progress-track"><div className="progress-fill" style={{ width: `${mmProgressPct}%` }} /></div><span className="progress-label">100%</span></div></div>
+                    <div className="lesson-body">
+                      {mixMatchState?.tooFew ? <p className="mm-empty">You need at least 3 vocabulary words.</p> : loading || !mixMatchState?.pairs?.length ? <p className="mm-loading">Loading pairs…</p> : (
+                        <>
+                          <div className="activity-type">Mix &amp; Match the vocabulary</div>
+                          <div className="score-chip">{Object.keys(mixMatchState.matched).length} / {mixMatchState.pairs.length} pairs matched</div>
+                          <p className="mm-hint">Tap a word, then tap its translation.</p>
+                          <p className="row-label">Words</p>
+                          <div className="match-grid" style={{ gridTemplateColumns: `repeat(${mixMatchState.pairs.length}, minmax(0, 1fr))` }}>
+                            {mixMatchState.leftOrder.map(id => { const p = mixMatchState.pairs.find(x => x.id === id); if (!p) return null; return (<button key={`L-${id}`} type="button" disabled={!!mixMatchState.matched[id]} className={`match-card${mixMatchState.matched[id] ? ' matched' : ''}${mixMatchState.pick?.vocabId === id && mixMatchState.pick?.side === 'left' ? ' selected' : ''}${mixMatchWrongIds?.includes(id) ? ' wrong' : ''}`} onClick={() => handleMixMatchTap('left', id)}>{display(p.word)}</button>); })}
                           </div>
-                          <p style={{ marginTop: '0.35rem' }}>{choiceDisplayText(w.translation)}</p>
-                          <p className="fl-auth-sub" style={{ marginTop: '0.25rem' }}>
-                            {formatTopicLabel(w.topic_tag || 'general')} · {formatLevel(w.level || levelLabel)}
-                          </p>
-                          <p style={{ marginTop: '0.45rem' }}>
-                            {truncateText(stripUnderscoresOnly(w.example_sentence), 160)}
-                          </p>
-                          <div style={{ marginTop: '0.55rem' }}>
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-primary"
-                              onClick={() => {
-                                award(10, 'vocabulary', `vocab-${w.id || `${w.word}-${w.topic_tag}`}`);
-                                recordPracticeAttempt({
-                                  section: 'vocabulary',
-                                  correct: true,
-                                  source: 'vocabulary_mark_learned',
-                                  topicTag: w.topic_tag || '',
-                                  contentId: w.id || null,
-                                  contentKind: 'VOCABULARY',
-                                  labelSnapshot: w.word || '',
-                                });
-                              }}
-                            >
-                              Mark learned (+10 XP)
-                            </button>
+                          <p className="row-label">Translations</p>
+                          <div className="match-grid" style={{ gridTemplateColumns: `repeat(${mixMatchState.pairs.length}, minmax(0, 1fr))` }}>
+                            {mixMatchState.rightOrder.map(id => { const p = mixMatchState.pairs.find(x => x.id === id); if (!p) return null; return (<button key={`R-${id}`} type="button" disabled={!!mixMatchState.matched[id]} className={`match-card${mixMatchState.matched[id] ? ' matched' : ''}${mixMatchState.pick?.vocabId === id && mixMatchState.pick?.side === 'right' ? ' selected' : ''}${mixMatchWrongIds?.includes(id) ? ' wrong' : ''}`} onClick={() => handleMixMatchTap('right', id)}>{display(p.translation)}</button>); })}
                           </div>
-                          <div style={{ marginTop: '0.55rem' }}>
-                            <p className="fl-auth-sub" style={{ marginBottom: '0.35rem' }}>
-                              Quick check: What is "{choiceDisplayText(w.word)}"?
-                            </p>
-                            {(() => {
-                              const right = String(w.translation || '');
-                              const wrong = pickDistractor(items, right, 'translation');
-                              const options = [right, wrong].sort(() => Math.random() - 0.5);
-                              const key = `vocab-${w.id || w.word}`;
-                              return (
-                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                  {options.map((opt) => (
-                                    <button
-                                      key={`${key}-${opt}`}
-                                      type="button"
-                                      className="fl-btn fl-btn-outline"
-                                      onClick={() =>
-                                        submitKnowledgeCheck({
-                                          section: 'vocabulary',
-                                          key,
-                                          correct: opt === right,
-                                          source: 'vocabulary_quick_check',
-                                          topicTag: w.topic_tag || '',
-                                          contentId: w.id || null,
-                                          contentKind: 'VOCABULARY',
-                                          labelSnapshot: w.word || '',
-                                        })
-                                      }
-                                    >
-                                      {choiceDisplayText(opt)}
-                                    </button>
-                                  ))}
-                                  {checkFeedback[key] ? (
-                                    <span className={checkFeedback[key] === 'correct' ? 'fl-auth-info' : 'fl-auth-error'}>
-                                      {checkFeedback[key] === 'correct' ? 'Correct' : 'Try again'}
-                                    </span>
-                                  ) : null}
-                                </div>
-                              );
-                            })()}
+                          {mixMatchFeedback && <div className={`feedback show${mixMatchFeedback.kind === 'correct' ? ' correct-fb' : ' wrong-fb'}`} role="status">{mixMatchFeedback.text}</div>}
+                          <div className="mm-footer-actions">
+                            <button className="btn-continue" disabled={Object.keys(mixMatchState.matched).length !== mixMatchState.pairs.length} onClick={() => setMixMatchRound(r => r + 1)}>{Object.keys(mixMatchState.matched).length === mixMatchState.pairs.length ? 'New round' : 'Check matches'}</button>
+                            <button className="mm-text-btn" onClick={() => setMixMatchRound(r => r + 1)}>Shuffle · new round now</button>
                           </div>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="fl-continue-card">
-                      <div>
-                        <h3>Section checkpoint</h3>
-                        <p>
-                          Score: {sectionChecks.vocabulary.correct}/{sectionChecks.vocabulary.total}{' '}
-                          ({sectionChecks.vocabulary.total ? Math.round((sectionChecks.vocabulary.correct / sectionChecks.vocabulary.total) * 100) : 0}%)
-                        </p>
-                        {sectionQuiz.section === 'vocabulary' && sectionQuiz.questions.length > 0 ? (
-                          !sectionQuiz.done ? (
-                            <div>
-                              <p style={{ marginTop: '0.5rem' }}>
-                                Q{sectionQuiz.index + 1}/{sectionQuiz.questions.length}: {sectionQuiz.questions[sectionQuiz.index]?.prompt}
-                              </p>
-                              <p className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                                Adaptive difficulty: {quizDifficulty ? quizDifficulty[0].toUpperCase() + quizDifficulty.slice(1) : 'Medium'}
-                              </p>
-                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                {(sectionQuiz.questions[sectionQuiz.index]?.options || []).map((opt) => (
-                                  <button key={opt} type="button" className="fl-btn fl-btn-outline" onClick={() => answerSectionQuiz(opt)}>
-                                    {choiceDisplayText(opt)}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="fl-auth-info" style={{ marginTop: '0.5rem' }}>
-                              Quiz complete: {sectionQuiz.correct}/{sectionQuiz.questions.length} (
-                              {sectionQuiz.questions.length ? Math.round((sectionQuiz.correct / sectionQuiz.questions.length) * 100) : 0}%)
-                            </p>
-                          )
-                        ) : (
-                          <button type="button" className="fl-btn fl-btn-primary" onClick={() => startSectionQuiz('vocabulary', items)}>
-                            Start 5-question quiz
-                          </button>
-                        )}
-                      </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                ) : null}
+                </div>
+              )}
 
-                {path === '/dashboard/mix-match' ? (
-                  <div className="fl-mix-lesson">
-                    <div className="lesson-card" id="card-match">
-                      <div className="top-bar top-bar-progress-only">
-                        <div className="progress-wrap">
-                          <span className="progress-label">0%</span>
-                          <div className="progress-track">
-                            <div
-                              className="progress-fill"
-                              id="match-progress"
-                              style={{ width: `${mixMatchProgressPct}%` }}
-                            />
-                          </div>
-                          <span className="progress-label">100%</span>
-                        </div>
-                      </div>
-
-                      <div className="lesson-body">
-                        {mixMatchState?.tooFew ? (
-                          <p className="mm-empty">
-                            You need at least three vocabulary words with translations. Add content or check the
-                            Vocabulary section — data comes from the same list.
-                          </p>
-                        ) : loading || !mixMatchState?.pairs?.length ? (
-                          <p className="mm-loading">Loading pairs…</p>
-                        ) : (
-                          <>
-                            <div className="topic-tag">
-                              {(() => {
-                                const tag = mixMatchState.pairs[0]?.topic_tag || '';
-                                const icon = tag
-                                  ? topicIconFromCatalog(topicsCatalog, tag)
-                                  : selectedTopics.length
-                                    ? topicIconFromCatalog(topicsCatalog, selectedTopics[0])
-                                    : '📚';
-                                const label = tag
-                                  ? formatTopicLabel(tag)
-                                  : selectedTopics.length
-                                    ? formatTopicLabel(selectedTopics[0])
-                                    : 'Your vocabulary';
-                                return (
-                                  <>
-                                    <span aria-hidden>{icon}</span> {label}
-                                  </>
-                                );
-                              })()}
-                            </div>
-                            <div className="activity-type">Mix &amp; Match the vocabulary</div>
-
-                            <div className="score-chip" id="match-score">
-                              <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
-                                <path
-                                  d="M6.5 1L8.1 4.6l3.9.4-2.8 2.6.8 3.8L6.5 9.4l-3.5 2 .8-3.8L1 5l3.9-.4L6.5 1z"
-                                  fill="currentColor"
-                                />
-                              </svg>
-                              {Object.keys(mixMatchState.matched).length} / {mixMatchState.pairs.length} pairs matched
-                            </div>
-                            <p className="mm-hint">
-                              Tap a word, then tap its translation. Pairs use your {languageLabel} vocabulary list.
-                            </p>
-
-                            <p className="row-label">Words</p>
-                            <div
-                              className="match-grid"
-                              id="words-row"
-                              style={{
-                                gridTemplateColumns: `repeat(${mixMatchState.pairs.length}, minmax(0, 1fr))`,
-                              }}
-                            >
-                              {mixMatchState.leftOrder.map((id) => {
-                                const p = mixMatchState.pairs.find((x) => x.id === id);
-                                if (!p) return null;
-                                const matched = !!mixMatchState.matched[id];
-                                const picked =
-                                  mixMatchState.pick?.vocabId === id && mixMatchState.pick?.side === 'left';
-                                const wrongFlash = mixMatchWrongIds?.includes(id);
-                                return (
-                                  <button
-                                    key={`L-${id}`}
-                                    type="button"
-                                    disabled={matched}
-                                    className={`match-card${matched ? ' matched' : ''}${picked ? ' selected' : ''}${
-                                      wrongFlash ? ' wrong' : ''
-                                    }`}
-                                    onClick={() => handleMixMatchTap('left', id)}
-                                  >
-                                    {choiceDisplayText(p.word)}
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            <p className="row-label">Translations</p>
-                            <div
-                              className="match-grid"
-                              id="trans-row"
-                              style={{
-                                gridTemplateColumns: `repeat(${mixMatchState.pairs.length}, minmax(0, 1fr))`,
-                              }}
-                            >
-                              {mixMatchState.rightOrder.map((id) => {
-                                const p = mixMatchState.pairs.find((x) => x.id === id);
-                                if (!p) return null;
-                                const matched = !!mixMatchState.matched[id];
-                                const picked =
-                                  mixMatchState.pick?.vocabId === id && mixMatchState.pick?.side === 'right';
-                                const wrongFlash = mixMatchWrongIds?.includes(id);
-                                return (
-                                  <button
-                                    key={`R-${id}`}
-                                    type="button"
-                                    disabled={matched}
-                                    className={`match-card${matched ? ' matched' : ''}${picked ? ' selected' : ''}${
-                                      wrongFlash ? ' wrong' : ''
-                                    }`}
-                                    onClick={() => handleMixMatchTap('right', id)}
-                                  >
-                                    {choiceDisplayText(p.translation)}
-                                  </button>
-                                );
-                              })}
-                            </div>
-
-                            {mixMatchFeedback ? (
-                              <div
-                                className={`feedback show${mixMatchFeedback.kind === 'correct' ? ' correct-fb' : ' wrong-fb'}`}
-                                id="match-feedback"
-                                role="status"
-                              >
-                                {mixMatchFeedback.text}
-                              </div>
-                            ) : null}
-
-                            <div className="mm-footer-actions">
-                              <button
-                                type="button"
-                                className="btn-continue"
-                                id="match-btn"
-                                disabled={
-                                  Object.keys(mixMatchState.matched).length !== mixMatchState.pairs.length
-                                }
-                                title={
-                                  Object.keys(mixMatchState.matched).length === mixMatchState.pairs.length
-                                    ? 'Shuffle a new set of words'
-                                    : 'Finish all pairs to start the next round with this button'
-                                }
-                                onClick={() => setMixMatchRound((r) => r + 1)}
-                              >
-                                {Object.keys(mixMatchState.matched).length === mixMatchState.pairs.length
-                                  ? 'New round'
-                                  : 'Check matches'}
-                              </button>
-                              <button
-                                type="button"
-                                className="mm-text-btn"
-                                onClick={() => setMixMatchRound((r) => r + 1)}
-                              >
-                                Shuffle · new round now
-                              </button>
-                            </div>
-                          </>
-                        )}
-                      </div>
+              {/* WEAK SPOTS */}
+              {path === '/dashboard/weak-spots' && !loading && (
+                <div>
+                  <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 4, letterSpacing: '-0.5px' }}>Weak Spots</h1>
+                  <p style={{ color: C.muted, marginBottom: 20 }}>Items you've answered incorrectly — ordered by most missed.</p>
+                  {items.length === 0 ? <div style={{ ...cardS, color: C.muted }}>No weak spots yet. Keep practicing!</div> : (
+                    <div style={{ display: 'grid', gap: 12 }}>
+                      {items.map(t => (<div key={t.id} style={cardS}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}><div><h3 style={{ color: C.text, margin: 0 }}>{stripU(t.label_snapshot) || 'Practice item'}</h3><p style={{ color: C.muted, fontSize: 13, margin: '4px 0' }}>{fmtTopic(t.section || '')} {t.topic_tag ? `· ${fmtTopic(t.topic_tag)}` : ''}</p><p style={{ color: C.red, fontSize: 13 }}>Missed {t.wrong_count} times</p></div><p style={{ color: C.muted, fontSize: 12, whiteSpace: 'nowrap' }}>{t.last_wrong_at ? new Date(t.last_wrong_at).toLocaleDateString() : '—'}</p></div></div>))}
                     </div>
-                  </div>
-                ) : null}
+                  )}
+                </div>
+              )}
 
-                {path === '/dashboard/grammar' ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    <p className="fl-auth-sub">{items.length} grammar rules</p>
-                    {items.map((g) => (
-                      <div key={g.id || g.code || g.title} className="fl-continue-card">
-                        <div style={{ width: '100%' }}>
-                          <h3 style={{ margin: 0 }}>
-                            {stripUnderscoresOnly(g.title) || formatTopicLabel(g.code || 'grammar')}
-                          </h3>
-                          <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                            {formatTopicLabel(g.category || 'grammar')} · {formatLevel(g.level || levelLabel)}
-                          </p>
-                          <p style={{ marginTop: '0.5rem' }}>{truncateText(stripUnderscoresOnly(g.explanation), 260)}</p>
-                          {g.examples ? (
-                            <p style={{ marginTop: '0.4rem' }}>
-                              <strong>Example:</strong> {truncateText(stripUnderscoresOnly(g.examples), 180)}
-                            </p>
-                          ) : null}
-                          <div style={{ marginTop: '0.55rem' }}>
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-primary"
-                              onClick={() => {
-                                award(12, 'grammar', `grammar-${g.id || g.code || g.title}`);
-                                recordPracticeAttempt({
-                                  section: 'grammar',
-                                  correct: true,
-                                  source: 'grammar_understood',
-                                  topicTag: '',
-                                  contentId: g.id || null,
-                                  contentKind: 'GRAMMAR',
-                                  labelSnapshot: g.title || g.code || '',
-                                });
-                              }}
-                            >
-                              I understand this (+12 XP)
-                            </button>
-                          </div>
-                          <div style={{ marginTop: '0.55rem' }}>
-                            {(() => {
-                              const key = `grammar-${g.id || g.code || g.title}`;
-                              const right = g.category || 'Grammar';
-                              const wrong = right === 'Grammar' ? 'Vocabulary' : 'Grammar';
-                              return (
-                                <>
-                                  <p className="fl-auth-sub" style={{ marginBottom: '0.35rem' }}>
-                                    Quick check: This rule belongs to which area?
-                                  </p>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      submitKnowledgeCheck({
-                                        section: 'grammar',
-                                        key,
-                                        correct: true,
-                                        source: 'grammar_quick_check',
-                                        contentId: g.id || null,
-                                        contentKind: 'GRAMMAR',
-                                        labelSnapshot: g.title || g.code || '',
-                                      })
-                                    }
-                                  >
-                                    {formatTopicLabel(right)}
-                                  </button>{' '}
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      submitKnowledgeCheck({
-                                        section: 'grammar',
-                                        key,
-                                        correct: false,
-                                        source: 'grammar_quick_check',
-                                        contentId: g.id || null,
-                                        contentKind: 'GRAMMAR',
-                                        labelSnapshot: g.title || g.code || '',
-                                      })
-                                    }
-                                  >
-                                    {formatTopicLabel(wrong)}
-                                  </button>
-                                  {checkFeedback[key] ? (
-                                    <span className={checkFeedback[key] === 'correct' ? 'fl-auth-info' : 'fl-auth-error'}>
-                                      {checkFeedback[key] === 'correct' ? 'Correct' : 'Try again'}
-                                    </span>
-                                  ) : null}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="fl-continue-card">
-                      <div>
-                        <h3>Section checkpoint</h3>
-                        <p>
-                          Score: {sectionChecks.grammar.correct}/{sectionChecks.grammar.total}{' '}
-                          ({sectionChecks.grammar.total ? Math.round((sectionChecks.grammar.correct / sectionChecks.grammar.total) * 100) : 0}%)
-                        </p>
-                        {sectionQuiz.section === 'grammar' && sectionQuiz.questions.length > 0 ? (
-                          !sectionQuiz.done ? (
-                            <div>
-                              <p style={{ marginTop: '0.5rem' }}>
-                                Q{sectionQuiz.index + 1}/{sectionQuiz.questions.length}: {sectionQuiz.questions[sectionQuiz.index]?.prompt}
-                              </p>
-                              <p className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                                Adaptive difficulty: {quizDifficulty ? quizDifficulty[0].toUpperCase() + quizDifficulty.slice(1) : 'Medium'}
-                              </p>
-                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                {(sectionQuiz.questions[sectionQuiz.index]?.options || []).map((opt) => (
-                                  <button key={opt} type="button" className="fl-btn fl-btn-outline" onClick={() => answerSectionQuiz(opt)}>
-                                    {formatTopicLabel(opt)}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="fl-auth-info" style={{ marginTop: '0.5rem' }}>
-                              Quiz complete: {sectionQuiz.correct}/{sectionQuiz.questions.length} (
-                              {sectionQuiz.questions.length ? Math.round((sectionQuiz.correct / sectionQuiz.questions.length) * 100) : 0}%)
-                            </p>
-                          )
-                        ) : (
-                          <button type="button" className="fl-btn fl-btn-primary" onClick={() => startSectionQuiz('grammar', items)}>
-                            Start 5-question quiz
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {path === '/dashboard/listening' ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    <p className="fl-auth-sub">{items.length} listening phrases</p>
-                    {items.map((p) => (
-                      <div key={p.id || p.phrase} className="fl-continue-card">
-                        <div style={{ width: '100%' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
-                            <h3 style={{ margin: 0 }}>{choiceDisplayText(p.phrase)}</h3>
-                            <button type="button" className="fl-btn fl-btn-outline" onClick={() => speakWord(p.phrase, p.audio_text)}>
-                              🔊
-                            </button>
-                          </div>
-                          <p style={{ marginTop: '0.35rem' }}>{choiceDisplayText(p.translation)}</p>
-                          <p className="fl-auth-sub" style={{ marginTop: '0.25rem' }}>
-                            {formatTopicLabel(p.topic_tag || 'general')} · {formatLevel(p.level || levelLabel)}
-                          </p>
-                          {p.context ? (
-                            <p style={{ marginTop: '0.45rem' }}>{truncateText(stripUnderscoresOnly(p.context), 160)}</p>
-                          ) : null}
-                          <div style={{ marginTop: '0.55rem' }}>
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-primary"
-                              onClick={() => {
-                                award(10, 'listening', `listen-${p.id || p.phrase}`);
-                                recordPracticeAttempt({
-                                  section: 'listening',
-                                  correct: true,
-                                  source: 'listening_heard_clearly',
-                                  topicTag: p.topic_tag || '',
-                                  contentId: p.id || null,
-                                  contentKind: 'PHRASE',
-                                  labelSnapshot: p.phrase || '',
-                                });
-                              }}
-                            >
-                              Heard clearly (+10 XP)
-                            </button>
-                          </div>
-                          <div style={{ marginTop: '0.55rem' }}>
-                            {(() => {
-                              const key = `listen-${p.id || p.phrase}`;
-                              const right = p.translation || '';
-                              const wrong = pickDistractor(items, right, 'translation');
-                              const options = [right, wrong].sort(() => Math.random() - 0.5);
-                              return (
-                                <>
-                                  <p className="fl-auth-sub" style={{ marginBottom: '0.35rem' }}>
-                                    Quick check: What did you hear?
-                                  </p>
-                                  {options.map((opt) => (
-                                    <button
-                                      key={`${key}-${opt}`}
-                                      type="button"
-                                      className="fl-btn fl-btn-outline"
-                                      onClick={() =>
-                                        submitKnowledgeCheck({
-                                          section: 'listening',
-                                          key,
-                                          correct: opt === right,
-                                          source: 'listening_quick_check',
-                                          topicTag: p.topic_tag || '',
-                                          contentId: p.id || null,
-                                          contentKind: 'PHRASE',
-                                          labelSnapshot: p.phrase || '',
-                                        })
-                                      }
-                                    >
-                                      {choiceDisplayText(opt)}
-                                    </button>
-                                  ))}
-                                  {checkFeedback[key] ? (
-                                    <span className={checkFeedback[key] === 'correct' ? 'fl-auth-info' : 'fl-auth-error'}>
-                                      {checkFeedback[key] === 'correct' ? 'Correct' : 'Try again'}
-                                    </span>
-                                  ) : null}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="fl-continue-card">
-                      <div>
-                        <h3>Section checkpoint</h3>
-                        <p>
-                          Score: {sectionChecks.listening.correct}/{sectionChecks.listening.total}{' '}
-                          ({sectionChecks.listening.total ? Math.round((sectionChecks.listening.correct / sectionChecks.listening.total) * 100) : 0}%)
-                        </p>
-                        {sectionQuiz.section === 'listening' && sectionQuiz.questions.length > 0 ? (
-                          !sectionQuiz.done ? (
-                            <div>
-                              <p style={{ marginTop: '0.5rem' }}>
-                                Q{sectionQuiz.index + 1}/{sectionQuiz.questions.length}: {sectionQuiz.questions[sectionQuiz.index]?.prompt}
-                              </p>
-                              <p className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                                Adaptive difficulty: {quizDifficulty ? quizDifficulty[0].toUpperCase() + quizDifficulty.slice(1) : 'Medium'}
-                              </p>
-                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                {(sectionQuiz.questions[sectionQuiz.index]?.options || []).map((opt) => (
-                                  <button key={opt} type="button" className="fl-btn fl-btn-outline" onClick={() => answerSectionQuiz(opt)}>
-                                    {choiceDisplayText(opt)}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="fl-auth-info" style={{ marginTop: '0.5rem' }}>
-                              Quiz complete: {sectionQuiz.correct}/{sectionQuiz.questions.length} (
-                              {sectionQuiz.questions.length ? Math.round((sectionQuiz.correct / sectionQuiz.questions.length) * 100) : 0}%)
-                            </p>
-                          )
-                        ) : (
-                          <button type="button" className="fl-btn fl-btn-primary" onClick={() => startSectionQuiz('listening', items)}>
-                            Start 5-question quiz
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {path === '/dashboard/conversation' ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    <p className="fl-auth-sub">{items.length} conversation templates</p>
-                    {items.map((c) => (
-                      <div key={c.id || c.title} className="fl-continue-card">
-                        <div style={{ width: '100%' }}>
-                          <h3 style={{ margin: 0 }}>
-                            {stripUnderscoresOnly(c.title) || formatTopicLabel('conversation template')}
-                          </h3>
-                          <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                            {formatTopicLabel(c.topic_tag || 'general')} · {formatLevel(c.level || levelLabel)}
-                          </p>
-                          <p style={{ marginTop: '0.45rem' }}>
-                            <strong>Scenario:</strong> {truncateText(stripUnderscoresOnly(c.scenario), 180)}
-                          </p>
-                          <p style={{ marginTop: '0.3rem' }}>
-                            <strong>Opening:</strong> {truncateText(stripUnderscoresOnly(c.opening_prompt), 180)}
-                          </p>
-                          {c.min_exchanges ? <p className="fl-auth-sub" style={{ marginTop: '0.4rem' }}>Min exchanges: {c.min_exchanges}</p> : null}
-                          <div style={{ marginTop: '0.55rem' }}>
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-primary"
-                              onClick={() => {
-                                award(14, 'conversation', `conv-${c.id || c.title}`);
-                                recordPracticeAttempt({
-                                  section: 'conversation',
-                                  correct: true,
-                                  source: 'conversation_completed',
-                                  topicTag: c.topic_tag || '',
-                                  contentId: c.id || null,
-                                  contentKind: 'TEMPLATE',
-                                  labelSnapshot: c.title || '',
-                                });
-                              }}
-                            >
-                              Completed dialogue (+14 XP)
-                            </button>
-                          </div>
-                          <div style={{ marginTop: '0.55rem' }}>
-                            {(() => {
-                              const key = `conv-${c.id || c.title}`;
-                              const right = c.topic_tag || 'General';
-                              const wrong = right === 'General' ? 'Travel' : 'General';
-                              return (
-                                <>
-                                  <p className="fl-auth-sub" style={{ marginBottom: '0.35rem' }}>
-                                    Quick check: This conversation is mostly about...
-                                  </p>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      submitKnowledgeCheck({
-                                        section: 'conversation',
-                                        key,
-                                        correct: true,
-                                        source: 'conversation_quick_check',
-                                        topicTag: c.topic_tag || '',
-                                        contentId: c.id || null,
-                                        contentKind: 'TEMPLATE',
-                                        labelSnapshot: c.title || '',
-                                      })
-                                    }
-                                  >
-                                    {formatTopicLabel(right)}
-                                  </button>{' '}
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      submitKnowledgeCheck({
-                                        section: 'conversation',
-                                        key,
-                                        correct: false,
-                                        source: 'conversation_quick_check',
-                                        topicTag: c.topic_tag || '',
-                                        contentId: c.id || null,
-                                        contentKind: 'TEMPLATE',
-                                        labelSnapshot: c.title || '',
-                                      })
-                                    }
-                                  >
-                                    {formatTopicLabel(wrong)}
-                                  </button>
-                                  {checkFeedback[key] ? (
-                                    <span className={checkFeedback[key] === 'correct' ? 'fl-auth-info' : 'fl-auth-error'}>
-                                      {checkFeedback[key] === 'correct' ? 'Correct' : 'Try again'}
-                                    </span>
-                                  ) : null}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="fl-continue-card">
-                      <div>
-                        <h3>Section checkpoint</h3>
-                        <p>
-                          Score: {sectionChecks.conversation.correct}/{sectionChecks.conversation.total}{' '}
-                          (
-                          {sectionChecks.conversation.total
-                            ? Math.round((sectionChecks.conversation.correct / sectionChecks.conversation.total) * 100)
-                            : 0}
-                          %)
-                        </p>
-                        {sectionQuiz.section === 'conversation' && sectionQuiz.questions.length > 0 ? (
-                          !sectionQuiz.done ? (
-                            <div>
-                              <p style={{ marginTop: '0.5rem' }}>
-                                Q{sectionQuiz.index + 1}/{sectionQuiz.questions.length}: {sectionQuiz.questions[sectionQuiz.index]?.prompt}
-                              </p>
-                              <p className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                                Adaptive difficulty: {quizDifficulty ? quizDifficulty[0].toUpperCase() + quizDifficulty.slice(1) : 'Medium'}
-                              </p>
-                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                {(sectionQuiz.questions[sectionQuiz.index]?.options || []).map((opt) => (
-                                  <button key={opt} type="button" className="fl-btn fl-btn-outline" onClick={() => answerSectionQuiz(opt)}>
-                                    {formatTopicLabel(opt)}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="fl-auth-info" style={{ marginTop: '0.5rem' }}>
-                              Quiz complete: {sectionQuiz.correct}/{sectionQuiz.questions.length} (
-                              {sectionQuiz.questions.length ? Math.round((sectionQuiz.correct / sectionQuiz.questions.length) * 100) : 0}%)
-                            </p>
-                          )
-                        ) : (
-                          <button type="button" className="fl-btn fl-btn-primary" onClick={() => startSectionQuiz('conversation', items)}>
-                            Start 5-question quiz
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {path === '/dashboard/writing' ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    <p className="fl-auth-sub">{items.length} writing passages</p>
-                    {items.map((r) => (
-                      <div key={r.id || r.title} className="fl-continue-card">
-                        <div style={{ width: '100%' }}>
-                          <h3 style={{ margin: 0 }}>
-                            {stripUnderscoresOnly(r.title) || formatTopicLabel('untitled passage')}
-                          </h3>
-                          <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                            {formatTopicLabel(r.topic_tag || 'general')} · {formatLevel(r.level || levelLabel)}
-                          </p>
-                          <p style={{ marginTop: '0.45rem' }}>{truncateText(stripUnderscoresOnly(r.body), 260)}</p>
-                          {r.translation ? (
-                            <p style={{ marginTop: '0.4rem' }}>
-                              <strong>Translation:</strong> {truncateText(stripUnderscoresOnly(r.translation), 180)}
-                            </p>
-                          ) : null}
-                          <div style={{ marginTop: '0.55rem' }}>
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-primary"
-                              onClick={() => {
-                                award(14, 'writing', `writing-${r.id || r.title}`);
-                                recordPracticeAttempt({
-                                  section: 'writing',
-                                  correct: true,
-                                  source: 'writing_completed',
-                                  topicTag: r.topic_tag || '',
-                                  contentId: r.id || null,
-                                  contentKind: 'READING',
-                                  labelSnapshot: r.title || '',
-                                });
-                              }}
-                            >
-                              Wrote response (+14 XP)
-                            </button>
-                          </div>
-                          <div style={{ marginTop: '0.55rem' }}>
-                            {(() => {
-                              const key = `writing-${r.id || r.title}`;
-                              const right = formatLevel(r.level || levelLabel);
-                              const wrong = right === 'Beginner' ? 'Advanced' : 'Beginner';
-                              return (
-                                <>
-                                  <p className="fl-auth-sub" style={{ marginBottom: '0.35rem' }}>
-                                    Quick check: This passage is closest to which level?
-                                  </p>
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      submitKnowledgeCheck({
-                                        section: 'writing',
-                                        key,
-                                        correct: true,
-                                        source: 'writing_quick_check',
-                                        topicTag: r.topic_tag || '',
-                                        contentId: r.id || null,
-                                        contentKind: 'READING',
-                                        labelSnapshot: r.title || '',
-                                      })
-                                    }
-                                  >
-                                    {right}
-                                  </button>{' '}
-                                  <button
-                                    type="button"
-                                    className="fl-btn fl-btn-outline"
-                                    onClick={() =>
-                                      submitKnowledgeCheck({
-                                        section: 'writing',
-                                        key,
-                                        correct: false,
-                                        source: 'writing_quick_check',
-                                        topicTag: r.topic_tag || '',
-                                        contentId: r.id || null,
-                                        contentKind: 'READING',
-                                        labelSnapshot: r.title || '',
-                                      })
-                                    }
-                                  >
-                                    {wrong}
-                                  </button>
-                                  {checkFeedback[key] ? (
-                                    <span className={checkFeedback[key] === 'correct' ? 'fl-auth-info' : 'fl-auth-error'}>
-                                      {checkFeedback[key] === 'correct' ? 'Correct' : 'Try again'}
-                                    </span>
-                                  ) : null}
-                                </>
-                              );
-                            })()}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="fl-continue-card">
-                      <div>
-                        <h3>Section checkpoint</h3>
-                        <p>
-                          Score: {sectionChecks.writing.correct}/{sectionChecks.writing.total}{' '}
-                          ({sectionChecks.writing.total ? Math.round((sectionChecks.writing.correct / sectionChecks.writing.total) * 100) : 0}%)
-                        </p>
-                        {sectionQuiz.section === 'writing' && sectionQuiz.questions.length > 0 ? (
-                          !sectionQuiz.done ? (
-                            <div>
-                              <p style={{ marginTop: '0.5rem' }}>
-                                Q{sectionQuiz.index + 1}/{sectionQuiz.questions.length}: {sectionQuiz.questions[sectionQuiz.index]?.prompt}
-                              </p>
-                              <p className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                                Adaptive difficulty: {quizDifficulty ? quizDifficulty[0].toUpperCase() + quizDifficulty.slice(1) : 'Medium'}
-                              </p>
-                              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                {(sectionQuiz.questions[sectionQuiz.index]?.options || []).map((opt) => (
-                                  <button key={opt} type="button" className="fl-btn fl-btn-outline" onClick={() => answerSectionQuiz(opt)}>
-                                    {choiceDisplayText(opt)}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          ) : (
-                            <p className="fl-auth-info" style={{ marginTop: '0.5rem' }}>
-                              Quiz complete: {sectionQuiz.correct}/{sectionQuiz.questions.length} (
-                              {sectionQuiz.questions.length ? Math.round((sectionQuiz.correct / sectionQuiz.questions.length) * 100) : 0}%)
-                            </p>
-                          )
-                        ) : (
-                          <button type="button" className="fl-btn fl-btn-primary" onClick={() => startSectionQuiz('writing', items)}>
-                            Start 5-question quiz
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {path === '/dashboard/ai-conversation' ? (
-                  <div className="fl-continue-card">
-                    <div style={{ width: '100%', maxWidth: '28rem', margin: '0 auto' }}>
-                      <h3>AI Tutor Chat</h3>
-                      <div
-                        ref={setChatScrollEl}
-                        style={{
-                          marginTop: '0.6rem',
-                          border: '1px solid var(--fl-border)',
-                          borderRadius: '12px',
-                          padding: '0.75rem',
-                          background: 'var(--fl-surface-soft)',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          justifyContent: 'flex-end',
-                          gap: '0.5rem',
-                          height: '420px',
-                          overflowY: 'auto',
-                        }}
-                      >
-                        {chatMessages.map((m, idx) => (
-                          <div
-                            key={`${m.role}-${idx}`}
-                            style={{
-                              width: '100%',
-                              display: 'flex',
-                              justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start',
-                            }}
-                          >
-                            <div
-                              style={{
-                                maxWidth: '88%',
-                                padding: '0.5rem 0.65rem',
-                                borderRadius: '10px',
-                                background: m.role === 'user' ? 'rgba(99,102,241,0.12)' : 'white',
-                                border: '1px solid var(--fl-border)',
-                              }}
-                            >
-                              <strong style={{ fontSize: '0.78rem' }}>{m.role === 'user' ? 'You' : 'Tutor'}</strong>
-                              <div style={{ marginTop: '0.18rem', whiteSpace: 'pre-wrap' }}>{m.content}</div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <textarea
-                        value={aiInput}
-                        onChange={(e) => setAiInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            sendAiMessage();
-                          }
-                        }}
-                        className="fl-placement-input"
-                        rows={3}
-                        style={{ marginTop: '0.6rem' }}
-                      />
-                      <div style={{ marginTop: '0.4rem' }}>
-                        <p className="fl-auth-sub">Press Enter to send. Press Shift+Enter for a new line.</p>
-                      </div>
-                      {aiFeedback ? (
-                        <div style={{ marginTop: '0.7rem' }}>
-                          <p><strong>Grammar:</strong> {aiFeedback.grammarScore} - {aiFeedback.grammarFeedback}</p>
-                          <p><strong>Pronunciation:</strong> {aiFeedback.pronunciationScore} - {aiFeedback.pronunciationFeedback}</p>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                {path === '/dashboard/subscription' ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    <div className="fl-continue-card">
-                      <div style={{ width: '100%' }}>
-                        <h3>Choose your plan</h3>
-                        <p className="fl-auth-sub">Current subscription and available plans.</p>
-                        <div style={{ marginTop: '0.7rem', display: 'grid', gap: '0.65rem' }}>
-                          <div style={{ border: '1px solid var(--fl-border)', borderRadius: '12px', padding: '0.75rem' }}>
-                            <strong>Free</strong>
-                            <div className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                              Core lessons, basic tracking, limited AI conversation.
-                            </div>
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-outline"
-                              style={{ marginTop: '0.55rem' }}
-                              onClick={async () => {
-                                await fetch('/api/subscriptions/cancel', {
-                                  method: 'PATCH',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ userId: user?.id, cancelReason: 'Downgrade to free' }),
-                                });
-                                navigate('/dashboard/subscription', { replace: true });
-                              }}
-                            >
-                              Use Free
-                            </button>
-                          </div>
-                          <div style={{ border: '1px solid var(--fl-border)', borderRadius: '12px', padding: '0.75rem', background: 'rgba(99,102,241,0.06)' }}>
-                            <strong>Premium Monthly - $19.99</strong>
-                            <div className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                              Full AI conversation feedback, advanced analytics, faster progression tools, premium challenge paths.
-                            </div>
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-primary"
-                              style={{ marginTop: '0.55rem' }}
-                              onClick={async () => {
-                                await fetch('/api/subscriptions/subscribe', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ userId: user?.id, plan: 'PREMIUM_MONTHLY', autoRenew: true }),
-                                });
-                                navigate('/dashboard/subscription', { replace: true });
-                              }}
-                            >
-                              Subscribe Monthly
-                            </button>
-                          </div>
-                          <div style={{ border: '1px solid var(--fl-border)', borderRadius: '12px', padding: '0.75rem' }}>
-                            <strong>Premium Yearly - $199.99</strong>
-                            <div className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                              Everything in Monthly plus annual savings and priority feature access.
-                            </div>
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-outline"
-                              style={{ marginTop: '0.55rem' }}
-                              onClick={async () => {
-                                await fetch('/api/subscriptions/subscribe', {
-                                  method: 'POST',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ userId: user?.id, plan: 'PREMIUM_YEARLY', autoRenew: true }),
-                                });
-                                navigate('/dashboard/subscription', { replace: true });
-                              }}
-                            >
-                              Subscribe Yearly
-                            </button>
-                          </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.55rem' }}>
-                          <button
-                            type="button"
-                            className="fl-btn fl-btn-outline"
-                            onClick={async () => {
-                              await fetch('/api/subscriptions/manage', {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ userId: user?.id, autoRenew: true }),
-                              });
-                              navigate('/dashboard/subscription', { replace: true });
-                            }}
-                          >
-                            Manage Subscription
-                          </button>
-                          <button
-                            type="button"
-                            className="fl-btn fl-btn-outline"
-                            onClick={async () => {
-                              await fetch('/api/subscriptions/cancel', {
-                                method: 'PATCH',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ userId: user?.id, cancelReason: 'User cancelled from dashboard' }),
-                              });
-                              navigate('/dashboard/subscription', { replace: true });
-                            }}
-                          >
-                            Cancel Subscription
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                    <div style={{ display: 'grid', gap: '0.75rem' }}>
-                      <h3>Current plan</h3>
-                      {(() => {
-                        const sub = (items || [])[0];
-                        const isActivePaid = sub && String(sub.status || '').toUpperCase() === 'ACTIVE';
-                        if (!isActivePaid) {
-                          return (
-                            <div className="fl-continue-card">
-                              <div>
-                                <h3>Free</h3>
-                                <p>Status: ACTIVE</p>
-                                <p className="fl-auth-sub">You are on the free plan.</p>
-                              </div>
-                            </div>
-                          );
-                        }
-                        return (
-                          <div className="fl-continue-card">
-                            <div>
-                              <h3>{formatTopicLabel(sub.plan || 'plan')}</h3>
-                              <p>Status: {formatTopicLabel(sub.status || '')}</p>
-                              <p className="fl-auth-sub">Auto renew: {String(sub.auto_renew)}</p>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                    </div>
-                    <div className="fl-continue-card" style={{ border: '1px solid #fecaca', background: 'linear-gradient(135deg, #fff 0%, #fff1f2 100%)' }}>
-                      <div style={{ width: '100%' }}>
-                        <h3 style={{ margin: 0, color: '#b91c1c' }}>Delete account</h3>
-                        <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                          This permanently deletes your account and related data from the system.
-                        </p>
-                        {!showDeleteFlow ? (
-                          <button
-                            type="button"
-                            className="fl-btn fl-btn-outline"
-                            style={{
-                              marginTop: '0.55rem',
-                              width: 'fit-content',
-                              borderColor: '#ef4444',
-                              color: '#b91c1c',
-                              background: '#fff',
-                            }}
-                            onClick={() => {
-                              setShowDeleteFlow(true);
-                              setDeleteError('');
-                              setDeleteInfo('');
-                              setDeletePassword('');
-                              setDeletePasswordVerified(false);
-                            }}
-                          >
-                            Delete account
-                          </button>
-                        ) : null}
-                        {deleteError ? (
-                          <p className="fl-auth-error" style={{ marginTop: '0.55rem' }}>
-                            {deleteError}
-                          </p>
-                        ) : null}
-                        {showDeleteFlow ? (
-                          <form
-                            onSubmit={async (e) => {
-                              e.preventDefault();
-                              setDeleteError('');
-                              setDeleteInfo('');
-                              if (!deletePassword.trim()) {
-                                setDeleteError('Enter your account password.');
-                                return;
-                              }
-                              if (!deletePasswordVerified) {
-                                setVerifyDeleteSubmitting(true);
-                                try {
-                                  await verifyAccountPassword({ userId: user?.id, password: deletePassword });
-                                  setDeletePasswordVerified(true);
-                                  setDeleteInfo('Password verified. You can now confirm deletion.');
-                                } catch (err) {
-                                  setDeleteError(err.message || 'Could not verify password.');
-                                } finally {
-                                  setVerifyDeleteSubmitting(false);
-                                }
-                                return;
-                              }
-                              setDeleteSubmitting(true);
-                              try {
-                                await deleteMyAccount({ userId: user?.id, password: deletePassword });
-                                clearStoredUser();
-                                navigate('/login?accountDeleted=1', { replace: true });
-                              } catch (err) {
-                                setDeleteError(err.message || 'Could not delete account.');
-                              } finally {
-                                setDeleteSubmitting(false);
-                              }
-                            }}
-                            style={{ marginTop: '0.6rem', display: 'grid', gap: '0.55rem', maxWidth: '440px' }}
-                          >
-                            {deleteInfo ? (
-                              <p className="fl-auth-info" style={{ marginTop: 0 }}>
-                                {deleteInfo}
-                              </p>
-                            ) : null}
-                            <div className="fl-field" style={{ marginBottom: 0 }}>
-                              <label htmlFor="delete-account-password">Step 1: Verify your password</label>
-                              <input
-                                id="delete-account-password"
-                                name="deleteAccountPassword"
-                                type="password"
-                                autoComplete="current-password"
-                                value={deletePassword}
-                                onChange={(e) => {
-                                  setDeletePassword(e.target.value);
-                                  setDeletePasswordVerified(false);
-                                  setDeleteInfo('');
-                                }}
-                                placeholder="Enter your password"
-                              />
-                            </div>
-                            {!deletePasswordVerified ? (
-                              <button
-                                type="submit"
-                                className="fl-btn fl-btn-outline"
-                                disabled={verifyDeleteSubmitting}
-                                style={{
-                                  width: 'fit-content',
-                                  borderColor: '#ef4444',
-                                  color: '#b91c1c',
-                                  background: '#fff',
-                                }}
-                              >
-                                {verifyDeleteSubmitting ? 'Verifying…' : 'Verify password'}
-                              </button>
-                            ) : (
-                              <button
-                                type="submit"
-                                className="fl-btn fl-btn-outline"
-                                disabled={deleteSubmitting}
-                                style={{
-                                  width: 'fit-content',
-                                  borderColor: '#ef4444',
-                                  color: '#b91c1c',
-                                  background: '#fff',
-                                }}
-                              >
-                                {deleteSubmitting ? 'Deleting…' : 'Step 2: Confirm delete account'}
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              className="fl-btn fl-btn-outline"
-                              style={{ width: 'fit-content' }}
-                              onClick={() => {
-                                setShowDeleteFlow(false);
-                                setDeletePasswordVerified(false);
-                                setDeletePassword('');
-                                setDeleteError('');
-                                setDeleteInfo('');
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </form>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
-
-                {path === '/dashboard/weak-spots' ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    <p className="fl-auth-sub">
-                      These are words, rules, phrases, dialogues, and readings you have missed in practice. Each entry
-                      disappears after you answer that same item correctly again.
-                    </p>
-                    {(items || []).length === 0 ? (
-                      <div className="fl-continue-card">
-                        <p style={{ margin: 0 }}>
-                          Nothing flagged yet. As you use vocabulary, grammar, listening, conversation, and writing
-                          practice, wrong answers show up here automatically.
-                        </p>
-                      </div>
-                    ) : (
-                      (items || []).map((t) => (
-                        <div key={t.id} className="fl-continue-card">
-                          <div
-                            style={{
-                              display: 'flex',
-                              justifyContent: 'space-between',
-                              gap: '0.75rem',
-                              flexWrap: 'wrap',
-                              alignItems: 'flex-start',
-                            }}
-                          >
-                            <div>
-                              <h3 style={{ margin: 0 }}>{troubleItemSummary(t)}</h3>
-                              <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                                {formatTopicLabel(t.section || '')} ·{' '}
-                                {formatTopicLabel(t.reference_type || '')}
-                                {t.topic_tag ? ` · ${formatTopicLabel(t.topic_tag)}` : ''}
-                              </p>
-                              <p className="fl-auth-sub" style={{ marginTop: '0.2rem' }}>
-                                Recorded misses: <strong>{t.wrong_count}</strong>
-                              </p>
-                            </div>
-                            <p className="fl-auth-sub" style={{ margin: 0, textAlign: 'right' }}>
-                              Last wrong:{' '}
-                              {t.last_wrong_at
-                                ? new Date(t.last_wrong_at).toLocaleString(undefined, {
-                                    dateStyle: 'medium',
-                                    timeStyle: 'short',
-                                  })
-                                : '—'}
-                            </p>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                ) : null}
-
-                {path === '/dashboard/retake-placement' ? (
-                  <div className="fl-retake-placement">
-                    <h3 className="fl-retake-placement-title">Retake placement test</h3>
-                    <p className="fl-auth-sub fl-retake-placement-copy">
-                      Retake the assessment to recalculate your level. When you finish, you’ll return here with your
-                      updated level — no need to pick topics again.
-                    </p>
-                    <button
-                      type="button"
-                      className="fl-btn fl-btn-primary"
-                      onClick={() => navigate('/onboarding/placement?retake=1')}
-                    >
-                      Retake placement now
-                    </button>
-                  </div>
-                ) : null}
-
-                {path === '/dashboard/achievements' ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    <p className="fl-auth-sub">
-                      {(items || []).filter((it) => Number(it.current_level || 0) > 0).length} unlocked of {items.length} total
-                    </p>
-                    {(items || []).map((it) => {
-                      const thresholds = parseThresholdLevels(it.thresholds);
+              {/* ACHIEVEMENTS */}
+              {path === '/dashboard/achievements' && !loading && (
+                <div>
+                  <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 20, letterSpacing: '-0.5px' }}>Achievements</h1>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16 }}>
+                    {(items || []).map(it => {
+                      const thresholds = parseThresholds(it.thresholds);
                       const currentLevel = Number(it.current_level || 0);
-                      const maxLevel = Number(it.max_level || thresholds.length || 1);
                       const unlocked = currentLevel > 0;
-                      const cappedLevel = Math.min(currentLevel, maxLevel);
-                      const nextTarget = thresholds[cappedLevel] || null;
+                      const nextTarget = thresholds[currentLevel] || null;
                       const progress = Number(it.progress || 0);
-                      const progressPct = nextTarget ? Math.max(0, Math.min(100, Math.round((progress / nextTarget) * 100))) : 100;
-                      return (
-                        <div key={it.achievement_id || it.code || it.name} className="fl-continue-card">
-                          <div style={{ width: '100%' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
-                              <h3 style={{ margin: 0 }}>
-                                {it.icon ? `${it.icon} ` : ''}
-                                {stripUnderscoresOnly(it.name) || formatTopicLabel(it.code || 'achievement')}
-                              </h3>
-                              <span className={`fl-badge ${unlocked ? 'fl-badge-lang' : 'fl-badge-beginner'}`}>
-                                {unlocked ? 'Unlocked' : 'Locked'}
-                              </span>
-                            </div>
-                            <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                              {stripUnderscoresOnly(
-                                it.description || 'Complete related learning milestones to unlock this badge.',
-                              )}
-                            </p>
-                            <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                              Code: {it.code ? formatTopicLabel(it.code) : 'N/A'} · Level {cappedLevel}/{maxLevel} · XP reward:{' '}
-                              {Number(it.xp_reward || 0)}
-                            </p>
-                            {nextTarget ? (
-                              <>
-                                <div
-                                  style={{
-                                    marginTop: '0.45rem',
-                                    width: '100%',
-                                    height: '8px',
-                                    borderRadius: '999px',
-                                    background: 'rgba(99,102,241,0.15)',
-                                    overflow: 'hidden',
-                                  }}
-                                >
-                                  <div
-                                    style={{
-                                      width: `${progressPct}%`,
-                                      height: '100%',
-                                      background: unlocked ? 'linear-gradient(90deg,#22c55e,#16a34a)' : 'linear-gradient(90deg,#6366f1,#22c55e)',
-                                    }}
-                                  />
-                                </div>
-                                <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                                  Progress: {progress}/{nextTarget}
-                                </p>
-                              </>
-                            ) : (
-                              <p className="fl-auth-sub" style={{ marginTop: '0.35rem' }}>
-                                Max level reached.
-                              </p>
-                            )}
-                          </div>
-                        </div>
-                      );
+                      const pct = nextTarget ? Math.min(100, Math.round((progress / nextTarget) * 100)) : 100;
+                      return (<div key={it.achievement_id || it.code} style={{ ...cardS, textAlign: 'center', padding: 18, opacity: unlocked ? 1 : 0.45, border: unlocked ? `1px solid ${C.accent}55` : `1px solid ${C.border}`, position: 'relative' }}><div style={{ fontSize: 28, marginBottom: 6 }}>{it.icon || '🏆'}</div><div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>{stripU(it.name)}</div><div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>{stripU(it.description || '')}</div>{nextTarget && <div style={{ marginTop: 8, height: 6, borderRadius: 99, background: C.dim }}><div style={{ width: `${pct}%`, height: '100%', borderRadius: 99, background: unlocked ? C.green : C.accent }} /></div>}{unlocked && <div style={{ position: 'absolute', top: 10, right: 10, color: C.green, fontSize: 14 }}>✓</div>}</div>);
                     })}
                   </div>
-                ) : null}
+                </div>
+              )}
 
-                {['/dashboard/reminders'].includes(path) ? (
-                  <div style={{ display: 'grid', gap: '0.75rem' }}>
-                    {(items || []).map((it) => (
-                      <div key={it.id || `${it.code || it.type || it.title}-${it.sent_at || it.unlocked_at || ''}`} className="fl-continue-card">
-                        <div>
-                          <h3>
-                            {stripUnderscoresOnly(it.title || it.name) ||
-                              formatTopicLabel(it.code || it.type || 'record')}
-                          </h3>
-                          <pre style={{ whiteSpace: 'pre-wrap', marginTop: '0.4rem', fontSize: '0.8rem' }}>
-                            {jsonPreview(it)}
-                          </pre>
+              {/* SUBSCRIPTION */}
+              {path === '/dashboard/subscription' && !loading && (
+                <div>
+                  <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 20, letterSpacing: '-0.5px' }}>Subscription</h1>
+                  <div style={{ ...cardS, marginBottom: 20, background: `${C.green}11`, border: `1px solid ${C.green}33` }}><div style={{ fontSize: 13, color: C.muted }}>Active Subscription</div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, marginTop: 4 }}>{(() => { const sub = (items || [])[0]; return sub?.status === 'ACTIVE' ? fmtTopic(sub.plan) : 'Free Plan'; })()}</div></div>
+                  <div style={{ fontSize: 13, color: C.muted, marginBottom: 14 }}>Upgrade your plan</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                    {[{ id: 'PLUS', label: 'Plus', price: '$9.99/mo', features: ['All lessons', 'AI Text Tutor', 'Scenarios', 'Achievements'] }, { id: 'PREMIUM_MONTHLY', label: 'Premium', price: '$19.99/mo', features: ['Everything in Plus', 'AI Voice Tutor', 'Weak Spot Analysis', 'Priority support'] }].map(plan => (
+                      <div key={plan.id} style={{ ...cardS, border: `1px solid ${C.border}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <div><div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{plan.label}</div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>{plan.features.map(f => <span key={f} style={{ fontSize: 12, color: C.muted }}>✓ {f}</span>)}</div></div>
+                          <div style={{ textAlign: 'right' }}><div style={{ fontSize: 20, fontWeight: 800, color: C.accentLight }}>{plan.price}</div><button style={{ ...btnS(), marginTop: 8, padding: '8px 16px', fontSize: 12 }} onClick={async () => { await fetch('/api/subscriptions/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user?.id, plan: plan.id, autoRenew: true }) }); }}>Upgrade</button></div>
                         </div>
                       </div>
                     ))}
                   </div>
-                ) : null}
+                  <div style={{ ...cardS, marginTop: 24, border: `1px solid ${C.red}44`, background: `${C.red}08` }}>
+                    <h3 style={{ color: C.red, margin: 0 }}>Delete account</h3>
+                    <p style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Permanently deletes your account and all data.</p>
+                    {!showDeleteFlow ? (<button style={{ ...btnS('ghost'), marginTop: 10, color: C.red, border: `1px solid ${C.red}44` }} onClick={() => { setShowDeleteFlow(true); setDeleteError(''); setDeleteInfo(''); setDeletePassword(''); setDeletePasswordVerified(false); }}>Delete account</button>) : (
+                      <form onSubmit={async e => {
+                        e.preventDefault(); setDeleteError(''); setDeleteInfo('');
+                        if (!deletePassword.trim()) { setDeleteError('Enter your password.'); return; }
+                        if (!deletePasswordVerified) { setVerifyDeleteSubmitting(true); try { await verifyAccountPassword({ userId: user?.id, password: deletePassword }); setDeletePasswordVerified(true); setDeleteInfo('Password verified. Confirm deletion below.'); } catch (err) { setDeleteError(err.message || 'Could not verify.'); } finally { setVerifyDeleteSubmitting(false); } return; }
+                        setDeleteSubmitting(true); try { await deleteMyAccount({ userId: user?.id, password: deletePassword }); clearStoredUser(); navigate('/login?accountDeleted=1', { replace: true }); } catch (err) { setDeleteError(err.message || 'Could not delete.'); } finally { setDeleteSubmitting(false); }
+                      }} style={{ marginTop: 12, display: 'grid', gap: 10 }}>
+                        {deleteInfo && <p style={{ color: C.green, fontSize: 13 }}>{deleteInfo}</p>}
+                        {deleteError && <p style={{ color: C.red, fontSize: 13 }}>{deleteError}</p>}
+                        <input type="password" value={deletePassword} onChange={e => { setDeletePassword(e.target.value); setDeletePasswordVerified(false); setDeleteInfo(''); }} placeholder="Enter your password" style={{ background: C.dim, border: 'none', borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 14, outline: 'none' }} />
+                        <div style={{ display: 'flex', gap: 8 }}>
+                          {!deletePasswordVerified ? <button type="submit" style={{ ...btnS('ghost'), color: C.red, border: `1px solid ${C.red}44` }} disabled={verifyDeleteSubmitting}>{verifyDeleteSubmitting ? 'Verifying…' : 'Verify password'}</button> : <button type="submit" style={{ ...btnS('ghost'), color: C.red, border: `1px solid ${C.red}44` }} disabled={deleteSubmitting}>{deleteSubmitting ? 'Deleting…' : 'Confirm delete'}</button>}
+                          <button type="button" style={btnS('ghost')} onClick={() => { setShowDeleteFlow(false); setDeletePassword(''); setDeleteError(''); setDeleteInfo(''); }}>Cancel</button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                </div>
+              )}
 
-                {['/dashboard/vocabulary', '/dashboard/grammar', '/dashboard/listening', '/dashboard/conversation', '/dashboard/writing', '/dashboard/achievements', '/dashboard/payments', '/dashboard/reminders'].includes(path) &&
-                items.length === 0 ? (
-                  <div className="fl-continue-card">
-                    <div>
-                      <h3>No records found</h3>
-                      <p>Try another language or add data to this table.</p>
+              {/* LEVEL ADJUST */}
+              {path === '/dashboard/retake-placement' && (
+                <div>
+                  <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 20, letterSpacing: '-0.5px' }}>Level Adjustment</h1>
+                  <div style={cardS}>
+                    <div style={{ fontSize: 14, color: C.muted, marginBottom: 8 }}>Your current level</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: C.accentLight, marginBottom: 16 }}>{fmtLevel(user?.assignedLevel || 'BEGINNER')}</div>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                      <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Placement Exam</div><div style={{ fontSize: 12, color: C.muted }}>Take a test to determine your current Spanish level and adjust your lesson content accordingly.</div></div>
+                      <button onClick={() => setRetakeConfirm(true)} style={btnS()}>Retake</button>
                     </div>
                   </div>
-                ) : null}
-              </>
-            ) : null}
-          </>
-        )}
-      </main>
-    </div>
+                  {retakeConfirm && (
+                    <div style={{ ...cardS, marginTop: 16, background: `${C.yellow}11`, border: `1px solid ${C.yellow}44` }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: C.yellow, marginBottom: 8 }}>⚠️ Caution</div>
+                      <div style={{ fontSize: 14, color: C.muted, marginBottom: 14 }}>Retaking the Placement Test and being assigned a new level will change your content level as well. Your progress will be adjusted.</div>
+                      <div style={{ display: 'flex', gap: 10 }}>
+                        <button style={btnS()} onClick={() => { setRetakeConfirm(false); navigate('/onboarding/placement?retake=1'); }}>Confirm & Retake</button>
+                        <button style={btnS('ghost')} onClick={() => setRetakeConfirm(false)}>Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }

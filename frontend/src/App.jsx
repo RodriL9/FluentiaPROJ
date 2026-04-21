@@ -10,6 +10,10 @@ import GoogleCallbackPage from './pages/GoogleCallbackPage';
 import OnboardingLanguagesPage from './pages/OnboardingLanguagesPage';
 import OnboardingPlacementPage from './pages/OnboardingPlacementPage';
 import OnboardingTopicPage from './pages/OnboardingTopicPage';
+import LessonsPage from './pages/LessonsPage';
+import LessonDetailPage from './pages/LessonDetailPage';
+
+
 
 export default function App() {
   return (
@@ -26,6 +30,8 @@ export default function App() {
         <Route path="/onboarding/topic" element={<OnboardingTopicPage />} />
         <Route path="/dashboard/*" element={<DashboardPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
+      
+
       </Route>
     </Routes>
   );
