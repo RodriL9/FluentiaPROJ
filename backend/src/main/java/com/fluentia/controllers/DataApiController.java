@@ -19,7 +19,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
 import java.time.LocalDate;
-import java.sql.Timestamp;
 import java.util.Locale;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -39,7 +38,7 @@ public class DataApiController {
             "kill", "murder", "bomb", "weapon", "suicide", "self harm",
             "drugs", "cocaine", "meth", "heroin",
             "hack", "steal", "fraud", "scam",
-            "minor", "child porn"
+            "minor" 
     );
 
     public DataApiController(JdbcTemplate jdbcTemplate, JdbcJsonNormalizer jdbcJson) {
@@ -114,8 +113,7 @@ public class DataApiController {
     public record AiConversationRequest(
             UUID userId,
             String language,
-            String userMessage,
-            String mode) {
+            String userMessage) {
     }
 
     @GetMapping("/content-overview")
@@ -790,18 +788,17 @@ public class DataApiController {
                            g.title AS detail_grammar_title,
                            p.phrase AS detail_phrase, p.translation AS detail_phrase_translation,
                            tpl.title AS detail_template_title,
-                           r.title AS detail_reading_title,
-                           COALESCE(v.lesson_number, p.lesson_number) AS source_lesson_number
+                           r.title AS detail_reading_title
                     FROM user_trouble_items t
                     LEFT JOIN vocabulary v ON t.reference_type = 'VOCABULARY' AND t.reference_id = v.id
                     LEFT JOIN grammar_rules g ON t.reference_type = 'GRAMMAR' AND t.reference_id = g.id
                     LEFT JOIN phrases p ON t.reference_type = 'PHRASE' AND t.reference_id = p.id
                     LEFT JOIN ai_conversation_templates tpl ON t.reference_type = 'TEMPLATE' AND t.reference_id = tpl.id
                     LEFT JOIN reading_passages r ON t.reference_type = 'READING' AND t.reference_id = r.id
-                    WHERE t.user_id = ?
-                    ORDER BY t.last_wrong_at DESC, t.wrong_count DESC
+                    WHERE t.user_id = ? AND t.language = ?
+                    ORDER BY t.wrong_count DESC, t.last_wrong_at DESC
                     LIMIT 200
-                    """, userId);
+                    """, userId, language);
         } catch (Exception ex) {
             return List.of();
         }
@@ -809,7 +806,7 @@ public class DataApiController {
 
     @GetMapping("/achievements/me")
     public List<Map<String, Object>> myAchievements(@RequestParam("userId") UUID userId) {
-        List<Map<String, Object>> rows = ql("""
+        return ql("""
                 SELECT
                     a.id AS achievement_id,
                     a.code,
@@ -832,123 +829,6 @@ public class DataApiController {
                     ua.unlocked_at DESC,
                     a.name
                 """, userId);
-
-        int userXp = scalarInt("SELECT COALESCE(xp, 0) FROM users WHERE id = ?", userId);
-        int userStreak = scalarInt("SELECT COALESCE(streak_count, 0) FROM users WHERE id = ?", userId);
-        int coreCompleted = scalarInt("""
-                SELECT COUNT(*)
-                FROM user_lesson_catalog_progress
-                WHERE user_id = ? AND passed = true
-                """, userId);
-        int topicCompleted = scalarInt("""
-                SELECT COUNT(*)
-                FROM user_lesson_progress
-                WHERE user_id = ? AND status = 'COMPLETED'
-                """, userId);
-        int aiSessions = scalarInt("SELECT COUNT(*) FROM ai_sessions WHERE user_id = ?", userId);
-        int premiumActive = scalarInt("""
-                SELECT COUNT(*)
-                FROM subscriptions
-                WHERE user_id = ?
-                  AND status = 'ACTIVE'
-                  AND (expires_at IS NULL OR expires_at >= now())
-                """, userId) > 0 ? 1 : 0;
-        int perfectLessonCount = scalarInt("""
-                SELECT COUNT(*)
-                FROM user_lesson_catalog_progress
-                WHERE user_id = ? AND passed = true AND COALESCE(score_percentage, 0) >= 100
-                """, userId);
-
-        Instant now = Instant.now();
-        for (Map<String, Object> row : rows) {
-            String code = normalizeString(row.get("code")).toUpperCase(Locale.ROOT);
-            int existingProgress = asInt(row.get("progress"));
-            int computedProgress = switch (code) {
-                case "BOOKWORM" -> coreCompleted + topicCompleted;
-                case "XP_COLLECTOR" -> userXp;
-                case "WILDFIRE" -> userStreak;
-                case "CONVERSATIONALIST" -> aiSessions;
-                case "PREMIUM_LEARNER" -> premiumActive;
-                case "PERFECTIONIST" -> perfectLessonCount;
-                case "UNIT_COMPLETE" -> topicCompleted;
-                default -> existingProgress;
-            };
-            int progress = Math.max(existingProgress, computedProgress);
-            List<Integer> thresholds = achievementThresholds(row.get("thresholds"));
-            int maxLevel = Math.max(1, asInt(row.get("max_level")));
-            int computedLevel = 0;
-            for (int i = 0; i < thresholds.size() && i < maxLevel; i++) {
-                if (progress >= thresholds.get(i)) {
-                    computedLevel = i + 1;
-                }
-            }
-            int level = Math.max(asInt(row.get("current_level")), computedLevel);
-            row.put("progress", progress);
-            row.put("current_level", level);
-            if (level > 0 && row.get("unlocked_at") == null) {
-                row.put("unlocked_at", now.toString());
-            }
-
-            try {
-                Timestamp unlockedAt = level > 0 ? Timestamp.from(now) : null;
-                jdbcTemplate.update("""
-                        INSERT INTO user_achievements (id, user_id, achievement_id, current_level, progress, unlocked_at)
-                        VALUES (?::uuid, ?::uuid, ?::uuid, ?, ?, ?)
-                        ON CONFLICT (user_id, achievement_id) DO UPDATE SET
-                            current_level = GREATEST(user_achievements.current_level, EXCLUDED.current_level),
-                            progress = GREATEST(user_achievements.progress, EXCLUDED.progress),
-                            unlocked_at = COALESCE(user_achievements.unlocked_at, EXCLUDED.unlocked_at)
-                        """,
-                        UUID.randomUUID().toString(),
-                        userId.toString(),
-                        String.valueOf(row.get("achievement_id")),
-                        level,
-                        progress,
-                        unlockedAt);
-            } catch (Exception ignored) {
-                // Never fail achievements endpoint because one upsert row failed.
-            }
-        }
-        return rows;
-    }
-
-    private int scalarInt(String sql, Object... args) {
-        try {
-            Number n = jdbcTemplate.queryForObject(sql, Number.class, args);
-            return n == null ? 0 : n.intValue();
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    private int asInt(Object value) {
-        if (value == null) return 0;
-        if (value instanceof Number n) return n.intValue();
-        try {
-            return Integer.parseInt(String.valueOf(value).trim());
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    private List<Integer> achievementThresholds(Object raw) {
-        try {
-            JsonNode node;
-            if (raw instanceof Map<?, ?> map) {
-                node = JSON.valueToTree(map);
-            } else {
-                node = JSON.readTree(String.valueOf(raw));
-            }
-            JsonNode levelsNode = node.path("levels");
-            if (!levelsNode.isArray()) return List.of();
-            List<Integer> out = new java.util.ArrayList<>();
-            for (JsonNode level : levelsNode) {
-                if (level.canConvertToInt()) out.add(level.asInt());
-            }
-            return out;
-        } catch (Exception ignored) {
-            return List.of();
-        }
     }
 
     @GetMapping("/notifications")
@@ -1076,41 +956,17 @@ public class DataApiController {
         }
         String language = normalizeString(body.language()).toLowerCase();
         if (language.isEmpty()) language = "es";
-        String mode = normalizeString(body.mode()).toLowerCase();
-        if (mode.isEmpty()) mode = "tutor";
-        boolean spanishOnlyMode = mode.equals("spanish_only");
 
         String learningLabel = language.startsWith("es") ? "Spanish" : language.startsWith("en") ? "English" : "the target language";
         String nativeLabel = language.startsWith("es") ? "English" : language.startsWith("en") ? "Spanish" : "English";
         String nativeCode = language.startsWith("es") ? "en" : language.startsWith("en") ? "es" : "en";
         String targetCode = language.startsWith("es") ? "es" : language.startsWith("en") ? "en" : language;
-        String modeInstruction = spanishOnlyMode
-                ? """
-                Conversation mode:
-                - Speak ONLY in the learner target language.
-                - Be natural and fluent like a native speaker.
-                - Do not switch to the learner native language unless the user explicitly asks.
-                - Avoid explicit corrections unless the learner requests correction.
-                """
-                : """
-                Tutor mode:
-                - Be a warm language tutor.
-                - Explain in the learner native language by default.
-                - Always include the key target-language phrase(s) clearly in straight double quotes.
-                - Inside quotes, write the real target-language spelling only (with proper accents/punctuation).
-                - Never put phonetic respellings inside quotes (avoid forms like "dohn-de", "komo", etc.).
-                - If the user asks how to say something, give: (1) natural translation, (2) short pronunciation help, (3) one alternate phrasing when useful.
-                - Put pronunciation help outside the quoted target-language phrase.
-                - If the user makes mistakes, give gentle corrections and a better phrasing.
-                - Keep corrections concise, practical, and encouraging.
-                """;
 
         String systemPrompt = """
                 You are Fluentia Tutor, a friendly human-like language coach.
                 Context:
                 - Learner native language: %s (%s)
                 - Learner target language: %s (%s)
-                - Active mode: %s
 
                 Style requirements:
                 - Sound natural, warm, and conversational, like a real tutor in chat.
@@ -1128,15 +984,12 @@ public class DataApiController {
                 Safety:
                 - Refuse inappropriate, sexual, hateful, violent, illegal, or self-harm requests.
                 - Briefly redirect back to safe language-learning help.
-                
-                %s
-                """.formatted(nativeLabel, nativeCode, learningLabel, targetCode, mode, modeInstruction);
+                """.formatted(nativeLabel, nativeCode, learningLabel, targetCode);
 
         Map<String, Object> aiResult = callOpenAiTutor(systemPrompt, msg);
         if (aiResult != null) {
             Map<String, Object> out = new LinkedHashMap<>(aiResult);
             out.put("language", language);
-            out.put("mode", mode);
             return out;
         }
 
@@ -1150,7 +1003,6 @@ public class DataApiController {
         return Map.of(
                 "ok", true,
                 "language", language,
-                "mode", mode,
                 "assistantReply", assistantReply,
                 "grammarScore", grammarScore,
                 "pronunciationScore", pronunciationScore,
@@ -1166,7 +1018,7 @@ public class DataApiController {
             HttpClient client = HttpClient.newHttpClient();
             JsonNode payload = JSON.createObjectNode()
                     .put("model", "gpt-4o-mini")
-                    .put("temperature", 0.45)
+                    .put("temperature", 0.95)
                     .set("messages", JSON.createArrayNode()
                             .add(JSON.createObjectNode().put("role", "system").put("content", systemPrompt))
                             .add(JSON.createObjectNode().put("role", "user").put("content", userMessage)));

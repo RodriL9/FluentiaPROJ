@@ -189,7 +189,7 @@ export default function DashboardPage() {
   const [aiChatScrollEl, setAiChatScrollEl] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [botInput, setBotInput] = useState('');
-  const [botMessages, setBotMessages] = useState([{ role: 'assistant', content: "Hi! I'm Florencia — ask me anything." }]);
+  const [botMessages, setBotMessages] = useState([{ role: 'assistant', content: "Hi, I'm Florencia, your Spanish tutor chatbot. Ask me anything you want to learn in Spanish." }]);
   const [botChatScrollEl, setBotChatScrollEl] = useState(null);
   const [aiConversationMode, setAiConversationMode] = useState('tutor');
   const [aiVoiceListening, setAiVoiceListening] = useState(false);
@@ -938,7 +938,7 @@ export default function DashboardPage() {
                 <div style={{ background: 'linear-gradient(90deg, #3b82f6 0%, #22c1c3 100%)', border: `1px solid ${C.border}`, borderRadius: 18, padding: 16 }}>
                   <p style={{ margin: 0, color: '#d9d2ff', fontSize: 18, fontWeight: 700 }}>Keep it going</p>
                   <h1 style={{ margin: '0 0 10px', fontSize: 46, lineHeight: 1.05, letterSpacing: '-0.5px', fontWeight: 800, color: '#ffffff' }}>Your Achievements</h1>
-                  <p style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 14, fontSize: 14 }}>Track your unlocked badges and progress toward the next milestone.</p>
+                  <p style={{ color: 'rgba(255,255,255,0.9)', marginBottom: 14, fontSize: 16 }}>Track your unlocked badges and progress toward the next milestone.</p>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 10 }}>
                     {(items || []).map((it) => {
@@ -964,17 +964,17 @@ export default function DashboardPage() {
                         >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, color: '#201a53' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 20 }}>{it.icon || '🏆'}</span>
-                              <strong style={{ fontSize: 18 }}>{stripU(it.name) || 'Achievement'}</strong>
+                              <span style={{ fontSize: 22 }}>{it.icon || '🏆'}</span>
+                              <strong style={{ fontSize: 20 }}>{stripU(it.name) || 'Achievement'}</strong>
                             </div>
                             {unlocked ? (
-                              <span style={{ fontSize: 11, fontWeight: 700, color: '#166534', background: '#dcfce7', borderRadius: 999, padding: '3px 8px' }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: '#166534', background: '#dcfce7', borderRadius: 999, padding: '3px 8px' }}>
                                 Unlocked
                               </span>
                             ) : null}
                           </div>
 
-                          <p style={{ margin: 0, fontSize: 14, color: '#4d4688', minHeight: 36 }}>
+                          <p style={{ margin: 0, fontSize: 16, color: '#4d4688', minHeight: 36 }}>
                             {stripU(it.description || 'Keep practicing to unlock this achievement.')}
                           </p>
 
@@ -982,10 +982,10 @@ export default function DashboardPage() {
                             <div style={{ height: 8, borderRadius: 999, background: '#ddd9f7', flex: 1 }}>
                               <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: unlocked ? 'linear-gradient(90deg, #34d399, #22c55e)' : 'linear-gradient(90deg, #7c6af7, #a899ff)' }} />
                             </div>
-                            <strong style={{ color: '#4f478f', fontSize: 14 }}>{pct}%</strong>
+                            <strong style={{ color: '#4f478f', fontSize: 16 }}>{pct}%</strong>
                           </div>
 
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 12, color: '#64748b' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, fontSize: 14, color: '#64748b' }}>
                             <span>Level {currentLevel || 0}</span>
                             <span>{nextTarget ? `${progress}/${nextTarget}` : unlocked ? 'Complete' : 'In progress'}</span>
                           </div>
@@ -1021,49 +1021,49 @@ export default function DashboardPage() {
               {path === '/dashboard/subscription' && !loading && (
                 <div>
                   <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 20, letterSpacing: '-0.5px' }}>Subscription</h1>
-                  <div style={{ ...cardS, marginBottom: 20, background: `${C.green}11`, border: `1px solid ${C.green}33` }}><div style={{ fontSize: 13, color: C.muted }}>Active Subscription</div><div style={{ fontSize: 20, fontWeight: 700, color: C.green, marginTop: 4 }}>{(() => { const sub = (items || [])[0]; return sub?.status === 'ACTIVE' ? fmtTopic(sub.plan) : 'Free Plan'; })()}</div></div>
+                  <div style={{ ...cardS, marginBottom: 20, background: `${C.green}11`, border: `1px solid ${C.green}33` }}><div style={{ fontSize: 15, color: C.muted }}>Active Subscription</div><div style={{ fontSize: 22, fontWeight: 700, color: C.green, marginTop: 4 }}>{(() => { const sub = (items || [])[0]; return sub?.status === 'ACTIVE' ? fmtTopic(sub.plan) : 'Free Plan'; })()}</div></div>
                   <div style={{ ...cardS, marginBottom: 20 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                       <div>
-                        <h3 style={{ margin: 0, color: C.text, fontSize: 18 }}>Payment Method</h3>
-                        <div style={{ fontSize: 12, color: C.muted, marginTop: 4 }}>Add or update your card for subscription billing.</div>
+                        <h3 style={{ margin: 0, color: C.text, fontSize: 20 }}>Payment Method</h3>
+                        <div style={{ fontSize: 14, color: C.muted, marginTop: 4 }}>Add or update your card for subscription billing.</div>
                       </div>
                     </div>
-                    {paymentMethodInfo ? <div style={{ marginBottom: 10, fontSize: 12, color: C.green }}>{paymentMethodInfo}</div> : null}
-                    {paymentMethodError ? <div style={{ marginBottom: 10, fontSize: 12, color: C.red }}>{paymentMethodError}</div> : null}
+                    {paymentMethodInfo ? <div style={{ marginBottom: 10, fontSize: 14, color: C.green }}>{paymentMethodInfo}</div> : null}
+                    {paymentMethodError ? <div style={{ marginBottom: 10, fontSize: 14, color: C.red }}>{paymentMethodError}</div> : null}
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 10 }}>
                       <input
                         value={paymentMethod.holder}
                         onChange={(e) => { setPaymentMethod((p) => ({ ...p, holder: e.target.value })); setPaymentMethodError(''); setPaymentMethodInfo(''); }}
                         placeholder="Cardholder name"
-                        style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 14, outline: 'none' }}
+                        style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 15, outline: 'none' }}
                       />
                       <input
                         value={paymentMethod.cardNumber}
                         onChange={(e) => { const clean = e.target.value.replace(/\D/g, '').slice(0, 16); const chunks = clean.match(/.{1,4}/g) || []; setPaymentMethod((p) => ({ ...p, cardNumber: chunks.join(' ') })); setPaymentMethodError(''); setPaymentMethodInfo(''); }}
                         placeholder="Card number"
-                        style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 14, outline: 'none' }}
+                        style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 15, outline: 'none' }}
                       />
                       <input
                         value={paymentMethod.expiry}
                         onChange={(e) => { const clean = e.target.value.replace(/\D/g, '').slice(0, 4); const next = clean.length >= 3 ? `${clean.slice(0, 2)}/${clean.slice(2)}` : clean; setPaymentMethod((p) => ({ ...p, expiry: next })); setPaymentMethodError(''); setPaymentMethodInfo(''); }}
                         placeholder="MM/YY"
-                        style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 14, outline: 'none' }}
+                        style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 15, outline: 'none' }}
                       />
                       <input
                         value={paymentMethod.cvc}
                         onChange={(e) => { const clean = e.target.value.replace(/\D/g, '').slice(0, 4); setPaymentMethod((p) => ({ ...p, cvc: clean })); setPaymentMethodError(''); setPaymentMethodInfo(''); }}
                         placeholder="CVC"
-                        style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 14, outline: 'none' }}
+                        style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 15, outline: 'none' }}
                       />
                     </div>
                     <div style={{ marginTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                      <span style={{ fontSize: 12, color: C.muted }}>
+                      <span style={{ fontSize: 14, color: C.muted }}>
                         {paymentMethod.cardNumber.replace(/\s/g, '').length >= 12 ? `Card ending in ${paymentMethod.cardNumber.replace(/\s/g, '').slice(-4)}` : 'No saved card yet'}
                       </span>
                       <button
                         type="button"
-                        style={{ ...btnS(), padding: '8px 16px', fontSize: 12 }}
+                        style={{ ...btnS(), padding: '8px 16px', fontSize: 14 }}
                         onClick={() => {
                           const cardDigits = paymentMethod.cardNumber.replace(/\s/g, '');
                           if (!paymentMethod.holder.trim() || cardDigits.length < 12 || !/^\d{2}\/\d{2}$/.test(paymentMethod.expiry) || paymentMethod.cvc.length < 3) {
@@ -1079,13 +1079,13 @@ export default function DashboardPage() {
                       </button>
                     </div>
                   </div>
-                  <div style={{ fontSize: 13, color: C.muted, marginBottom: 14 }}>Upgrade your plan</div>
+                  <div style={{ fontSize: 15, color: C.muted, marginBottom: 14 }}>Upgrade your plan</div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                     {[{ id: 'PLUS', label: 'Plus', price: '$9.99/mo', features: ['All lessons', 'AI Text Tutor', 'Scenarios', 'Achievements'] }, { id: 'PREMIUM_MONTHLY', label: 'Premium', price: '$19.99/mo', features: ['Everything in Plus', 'AI Voice Tutor', 'Weak Spot Analysis', 'Priority support'] }].map(plan => (
                       <div key={plan.id} style={{ ...cardS, border: `1px solid ${C.border}` }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div><div style={{ fontSize: 16, fontWeight: 700, color: C.text }}>{plan.label}</div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>{plan.features.map(f => <span key={f} style={{ fontSize: 12, color: C.muted }}>✓ {f}</span>)}</div></div>
-                          <div style={{ textAlign: 'right' }}><div style={{ fontSize: 20, fontWeight: 800, color: C.accentLight }}>{plan.price}</div><button style={{ ...btnS(), marginTop: 8, padding: '8px 16px', fontSize: 12 }} onClick={async () => { await fetch('/api/subscriptions/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user?.id, plan: plan.id, autoRenew: true }) }); }}>Upgrade</button></div>
+                          <div><div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>{plan.label}</div><div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>{plan.features.map(f => <span key={f} style={{ fontSize: 14, color: C.muted }}>✓ {f}</span>)}</div></div>
+                          <div style={{ textAlign: 'right' }}><div style={{ fontSize: 22, fontWeight: 800, color: C.accentLight }}>{plan.price}</div><button style={{ ...btnS(), marginTop: 8, padding: '8px 16px', fontSize: 14 }} onClick={async () => { await fetch('/api/subscriptions/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: user?.id, plan: plan.id, autoRenew: true }) }); }}>Upgrade</button></div>
                         </div>
                       </div>
                     ))}
@@ -1098,8 +1098,8 @@ export default function DashboardPage() {
                 <div>
                   <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 20, letterSpacing: '-0.5px' }}>Account</h1>
                   <div style={{ ...cardS }}>
-                    <p style={{ color: C.muted, fontSize: 13, marginTop: 0 }}>View your account details and manage account actions.</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', rowGap: 8, columnGap: 10, marginTop: 12, fontSize: 14 }}>
+                    <p style={{ color: C.muted, fontSize: 15, marginTop: 0 }}>View your account details and manage account actions.</p>
+                    <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', rowGap: 8, columnGap: 10, marginTop: 12, fontSize: 16 }}>
                       <div style={{ color: C.muted }}>Name</div>
                       <div style={{ color: C.text, fontWeight: 600 }}>{user?.fullName || user?.username || '—'}</div>
                       <div style={{ color: C.muted }}>Email</div>
@@ -1107,8 +1107,8 @@ export default function DashboardPage() {
                     </div>
 
                     <div style={{ marginTop: 16, border: `1px solid ${C.red}44`, borderRadius: 12, background: `${C.red}08`, padding: 12 }}>
-                      <h4 style={{ color: C.red, margin: 0 }}>Delete account</h4>
-                      <p style={{ color: C.muted, fontSize: 13, marginTop: 4 }}>Permanently deletes your account and all data.</p>
+                      <h4 style={{ color: C.red, margin: 0, fontSize: 18 }}>Delete account</h4>
+                      <p style={{ color: C.muted, fontSize: 15, marginTop: 4 }}>Permanently deletes your account and all data.</p>
                       {!showDeleteFlow ? (<button style={{ ...btnS('ghost'), marginTop: 10, color: C.red, border: `1px solid ${C.red}44` }} onClick={() => { setShowDeleteFlow(true); setDeleteError(''); setDeleteInfo(''); setDeletePassword(''); setDeletePasswordVerified(false); }}>Delete account</button>) : (
                         <form onSubmit={async e => {
                           e.preventDefault(); setDeleteError(''); setDeleteInfo('');
@@ -1116,9 +1116,9 @@ export default function DashboardPage() {
                           if (!deletePasswordVerified) { setVerifyDeleteSubmitting(true); try { await verifyAccountPassword({ userId: user?.id, password: deletePassword }); setDeletePasswordVerified(true); setDeleteInfo('Password verified. Confirm deletion below.'); } catch (err) { setDeleteError(err.message || 'Could not verify.'); } finally { setVerifyDeleteSubmitting(false); } return; }
                           setDeleteSubmitting(true); try { await deleteMyAccount({ userId: user?.id, password: deletePassword }); clearStoredUser(); navigate('/login?accountDeleted=1', { replace: true }); } catch (err) { setDeleteError(err.message || 'Could not delete.'); } finally { setDeleteSubmitting(false); }
                         }} style={{ marginTop: 12, display: 'grid', gap: 10 }}>
-                          {deleteInfo && <p style={{ color: C.green, fontSize: 13 }}>{deleteInfo}</p>}
-                          {deleteError && <p style={{ color: C.red, fontSize: 13 }}>{deleteError}</p>}
-                          <input type="password" value={deletePassword} onChange={e => { setDeletePassword(e.target.value); setDeletePasswordVerified(false); setDeleteInfo(''); }} placeholder="Enter your password" style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 14, outline: 'none' }} />
+                          {deleteInfo && <p style={{ color: C.green, fontSize: 15 }}>{deleteInfo}</p>}
+                          {deleteError && <p style={{ color: C.red, fontSize: 15 }}>{deleteError}</p>}
+                          <input type="password" value={deletePassword} onChange={e => { setDeletePassword(e.target.value); setDeletePasswordVerified(false); setDeleteInfo(''); }} placeholder="Enter your password" style={{ background: '#f1f5f9', border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 14px', color: C.text, fontFamily: 'inherit', fontSize: 15, outline: 'none' }} />
                           <div style={{ display: 'flex', gap: 8 }}>
                             {!deletePasswordVerified ? <button type="submit" style={{ ...btnS('ghost'), color: C.red, border: `1px solid ${C.red}44` }} disabled={verifyDeleteSubmitting}>{verifyDeleteSubmitting ? 'Verifying…' : 'Verify password'}</button> : <button type="submit" style={{ ...btnS('ghost'), color: C.red, border: `1px solid ${C.red}44` }} disabled={deleteSubmitting}>{deleteSubmitting ? 'Deleting…' : 'Confirm delete'}</button>}
                             <button type="button" style={btnS('ghost')} onClick={() => { setShowDeleteFlow(false); setDeletePassword(''); setDeleteError(''); setDeleteInfo(''); }}>Cancel</button>
@@ -1135,17 +1135,17 @@ export default function DashboardPage() {
                 <div>
                   <h1 style={{ fontSize: 28, fontWeight: 800, marginBottom: 20, letterSpacing: '-0.5px' }}>Level Adjustment</h1>
                   <div style={cardS}>
-                    <div style={{ fontSize: 14, color: C.muted, marginBottom: 8 }}>Your current level</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: C.accentLight, marginBottom: 16 }}>{fmtLevel(user?.assignedLevel || 'BEGINNER')}</div>
+                    <div style={{ fontSize: 16, color: C.muted, marginBottom: 8 }}>Your current level</div>
+                    <div style={{ fontSize: 24, fontWeight: 700, color: C.accentLight, marginBottom: 16 }}>{fmtLevel(user?.assignedLevel || 'BEGINNER')}</div>
                     <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                      <div style={{ flex: 1 }}><div style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>Placement Exam</div><div style={{ fontSize: 12, color: C.muted }}>Take a test to determine your current Spanish level and adjust your lesson content accordingly.</div></div>
+                      <div style={{ flex: 1 }}><div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Placement Exam</div><div style={{ fontSize: 14, color: C.muted }}>Take a test to determine your current Spanish level and adjust your lesson content accordingly.</div></div>
                       <button onClick={() => setRetakeConfirm(true)} style={btnS()}>Retake</button>
                     </div>
                   </div>
                   {retakeConfirm && (
                     <div style={{ ...cardS, marginTop: 16, background: `${C.yellow}11`, border: `1px solid ${C.yellow}44` }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: C.yellow, marginBottom: 8 }}>⚠️ Caution</div>
-                      <div style={{ fontSize: 14, color: C.muted, marginBottom: 14 }}>Retaking the Placement Test and being assigned a new level will change your content level as well. Your progress will be adjusted.</div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: C.yellow, marginBottom: 8 }}>⚠️ Caution</div>
+                      <div style={{ fontSize: 15, color: C.muted, marginBottom: 14 }}>Retaking the Placement Test and being assigned a new level will change your content level as well. Your progress will be adjusted.</div>
                       <div style={{ display: 'flex', gap: 10 }}>
                         <button style={btnS()} onClick={() => { setRetakeConfirm(false); navigate('/onboarding/placement?retake=1'); }}>Confirm & Retake</button>
                         <button style={btnS('ghost')} onClick={() => setRetakeConfirm(false)}>Cancel</button>
@@ -1163,7 +1163,18 @@ export default function DashboardPage() {
         {chatOpen ? (
           <div style={{ width: 340, height: 460, background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, boxShadow: '0 18px 38px rgba(15, 23, 42, 0.22)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', borderBottom: `1px solid ${C.border}`, background: '#f4fbf8' }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>💬 Florencia</div>
+              <div
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  background: 'linear-gradient(90deg, #8b5cf6, #3b82f6)',
+                  WebkitBackgroundClip: 'text',
+                  backgroundClip: 'text',
+                  color: 'transparent',
+                }}
+              >
+                💬 Florencia
+              </div>
               <button type="button" onClick={() => setChatOpen(false)} style={{ border: 'none', background: 'transparent', color: C.muted, cursor: 'pointer', fontSize: 18, lineHeight: 1 }}>×</button>
             </div>
             <div ref={setBotChatScrollEl} style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10, padding: 12 }}>
