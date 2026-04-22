@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getStoredUser } from '../api/auth';
+import { speakFluent } from '../utils/speech';
 
 const C = {
-  bg: '#0f0f14', surface: '#1a1a24', card: '#22222f',
-  border: '#2e2e3f', accent: '#7c6af7', accentLight: '#a899ff',
-  green: '#4ade80', yellow: '#fbbf24', red: '#f87171',
-  text: '#f0eeff', muted: '#8b8aaa', dim: '#3d3d55',
+  bg: '#eef6f3', surface: '#f1f5f9', card: '#f8fffc',
+  border: '#d8ece6', accent: '#3b82f6', accentLight: '#22c1c3',
+  green: '#22c55e', yellow: '#f59e0b', red: '#ef4444',
+  text: '#0f172a', muted: '#64748b', dim: '#d9e8e4',
 };
 
 const card = { background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: 24 };
@@ -189,7 +190,7 @@ function FreeWrite({ exercise, onAnswer }) {
   );
 }
 
-function AudioTap({ exercise, onAnswer }) {
+function AudioTap({ exercise, onAnswer, speakLanguage = 'es' }) {
   const opts = parseOptions(exercise.options);
   const wordBank = shuffle(opts?.word_bank || []);
   const [selected, setSelected] = useState([]);
@@ -197,11 +198,7 @@ function AudioTap({ exercise, onAnswer }) {
   const [played, setPlayed] = useState(false);
 
   const speak = () => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(exercise.correct_answer);
-    utt.lang = 'es-ES'; utt.rate = 0.85;
-    window.speechSynthesis.speak(utt);
+    speakFluent(exercise.correct_answer, { language: speakLanguage, rate: 0.88 });
     setPlayed(true);
   };
 
@@ -281,16 +278,12 @@ function ReadingComprehension({ exercise, onAnswer }) {
   );
 }
 
-function Speaking({ exercise, onAnswer }) {
+function Speaking({ exercise, onAnswer, speakLanguage = 'es' }) {
   const [listening, setListening] = useState(false);
   const [done, setDone] = useState(false);
 
   const speak = () => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(exercise.correct_answer);
-    utt.lang = 'es-ES'; utt.rate = 0.85;
-    window.speechSynthesis.speak(utt);
+    speakFluent(exercise.correct_answer, { language: speakLanguage, rate: 0.88 });
   };
 
   const markDone = () => {
@@ -413,7 +406,7 @@ export default function TopicLessonPage({ lessonId, lessonTitle, onBack }) {
   };
 
   const renderExercise = (ex) => {
-    const props = { exercise: ex, onAnswer: handleAnswer };
+    const props = { exercise: ex, onAnswer: handleAnswer, speakLanguage: user?.learningLanguage || 'es' };
     switch (ex.exercise_type) {
       case 'IMAGE_PICK': return <ImagePick {...props} />;
       case 'FILL_BLANK': return <FillBlank {...props} />;
@@ -428,9 +421,35 @@ export default function TopicLessonPage({ lessonId, lessonTitle, onBack }) {
 
   const atEnd = current >= exercises.length - 1 && results.length >= exercises.length - 1;
 
-  if (loading) return <p style={{ color: C.muted }}>Loading lesson...</p>;
-  if (error) return <p style={{ color: C.red }}>{error}</p>;
-  if (!exercises.length) return <p style={{ color: C.muted }}>No exercises found for this lesson.</p>;
+  if (loading) {
+    return (
+      <div style={{ fontFamily: "'DM Sans', sans-serif", color: C.text }}>
+        <button onClick={onBack} style={{ ...btn('ghost'), fontSize: 13, marginBottom: 16 }}>← Back to Topics</button>
+        <p style={{ color: C.muted }}>Loading lesson...</p>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <div style={{ fontFamily: "'DM Sans', sans-serif", color: C.text }}>
+        <button onClick={onBack} style={{ ...btn('ghost'), fontSize: 13, marginBottom: 16 }}>← Back to Topics</button>
+        <p style={{ color: C.red }}>{error}</p>
+      </div>
+    );
+  }
+  if (!exercises.length) {
+    return (
+      <div style={{ fontFamily: "'DM Sans', sans-serif", color: C.text }}>
+        <button onClick={onBack} style={{ ...btn('ghost'), fontSize: 13, marginBottom: 16 }}>← Back to Topics</button>
+        <div style={{ ...card }}>
+          <h3 style={{ margin: '0 0 8px', color: C.text }}>No lesson content yet</h3>
+          <p style={{ margin: 0, color: C.muted, fontSize: 14 }}>
+            This lesson does not have exercises right now. You can go back and open another lesson in this topic.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", color: C.text }}>

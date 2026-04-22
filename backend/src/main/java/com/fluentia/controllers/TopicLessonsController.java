@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDate;
 import java.util.*;
 
 /**
@@ -240,6 +241,8 @@ public class TopicLessonsController {
             VALUES (?::uuid, ?, 'LESSON', now())
             """, userId, xpReward);
 
+        updateStreak(userId);
+
         // Log wrong answers as trouble items
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> wrongAnswers =
@@ -249,17 +252,26 @@ public class TopicLessonsController {
                 String lang = (String) wa.getOrDefault("language", "es");
                 String section = (String) wa.getOrDefault("section", "vocabulary");
                 String label = (String) wa.getOrDefault("label", "");
+                String referenceType = switch (String.valueOf(section).toLowerCase()) {
+                    case "grammar" -> "GRAMMAR";
+                    case "listening" -> "PHRASE";
+                    case "conversation", "speaking" -> "TEMPLATE";
+                    case "writing" -> "READING";
+                    default -> "VOCABULARY";
+                };
                 String dedupeKey = section + ":" + label;
 
                 jdbc.update("""
                     INSERT INTO user_trouble_items 
-                        (user_id, language, section, label_snapshot, dedupe_key, wrong_count, last_wrong_at)
-                    VALUES (?::uuid, ?, ?, ?, ?, 1, now())
+                        (user_id, language, section, reference_type, label_snapshot, dedupe_key, wrong_count, last_wrong_at)
+                    VALUES (?::uuid, ?, ?, ?, ?, ?, 1, now())
                     ON CONFLICT (user_id, language, dedupe_key) DO UPDATE SET
                         wrong_count = user_trouble_items.wrong_count + 1,
                         last_wrong_at = now(),
-                        updated_at = now()
-                    """, userId, lang, section, label, dedupeKey);
+                        section = EXCLUDED.section,
+                        reference_type = EXCLUDED.reference_type,
+                        label_snapshot = COALESCE(EXCLUDED.label_snapshot, user_trouble_items.label_snapshot)
+                    """, userId, lang, section, referenceType, label, dedupeKey);
             } catch (Exception ignored) {}
         }
 
@@ -275,5 +287,33 @@ public class TopicLessonsController {
     private int toInt(Object val, int def) {
         if (val == null) return def;
         try { return ((Number) val).intValue(); } catch (Exception e) { return def; }
+    }
+
+    private void updateStreak(String userId) {
+        List<Map<String, Object>> userRows = jdbc.queryForList(
+            "SELECT streak_count, last_active_date FROM users WHERE id = ?::uuid", userId);
+        if (userRows.isEmpty()) return;
+
+        Object lastActiveObj = userRows.get(0).get("last_active_date");
+        int currentStreak = toInt(userRows.get(0).get("streak_count"), 0);
+        LocalDate today = LocalDate.now();
+        LocalDate lastActive = lastActiveObj != null ? LocalDate.parse(lastActiveObj.toString()) : null;
+
+        int newStreak = currentStreak;
+        if (!today.equals(lastActive)) {
+            LocalDate yesterday = today.minusDays(1);
+            newStreak = yesterday.equals(lastActive) ? currentStreak + 1 : 1;
+        }
+
+        jdbc.update("""
+            UPDATE users SET streak_count = ?, last_active_date = ?, updated_at = now()
+            WHERE id = ?::uuid
+            """, newStreak, today, userId);
+
+        jdbc.update("""
+            INSERT INTO streak_history (user_id, streak_date, was_active)
+            VALUES (?::uuid, ?, true)
+            ON CONFLICT DO NOTHING
+            """, userId, today);
     }
 }

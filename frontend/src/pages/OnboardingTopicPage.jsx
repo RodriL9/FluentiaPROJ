@@ -43,6 +43,13 @@ export default function OnboardingTopicPage() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
+    document.body.classList.add('fl-auth-light-body');
+    return () => {
+      document.body.classList.remove('fl-auth-light-body');
+    };
+  }, []);
+
+  useEffect(() => {
     if (!stored) {
       navigate('/login', { replace: true });
       return;
@@ -66,7 +73,7 @@ export default function OnboardingTopicPage() {
   if (!stored) return null;
 
   return (
-    <div className="fl-auth-page">
+    <div className="fl-auth-page fl-login-page">
       <div className="fl-auth-card" style={{ maxWidth: '760px' }}>
         <h1 className="fl-auth-title">Choose your topics</h1>
         <p className="fl-auth-sub">

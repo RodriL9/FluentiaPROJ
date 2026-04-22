@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { getNextOnboardingRoute, registerAccount, setStoredUser } from '../api/auth';
 import GoogleSignInButton from '../components/GoogleSignInButton';
@@ -8,8 +8,15 @@ export default function RegisterPage() {
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
+  useEffect(() => {
+    document.body.classList.add('fl-auth-light-body');
+    return () => {
+      document.body.classList.remove('fl-auth-light-body');
+    };
+  }, []);
+
   return (
-    <div className="fl-auth-page">
+    <div className="fl-auth-page fl-register-page">
       <div className="fl-auth-card">
         <h1 className="fl-auth-title">Create an account</h1>
         <p className="fl-auth-sub">Start your language learning journey today</p>

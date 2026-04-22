@@ -383,17 +383,26 @@ public class LessonCatalogController {
             String language = (String) wa.getOrDefault("language", "es");
             String section = (String) wa.getOrDefault("section", "vocabulary");
             String labelSnapshot = (String) wa.getOrDefault("label", "");
+            String referenceType = switch (String.valueOf(section).toLowerCase()) {
+                case "grammar" -> "GRAMMAR";
+                case "listening" -> "PHRASE";
+                case "conversation", "speaking" -> "TEMPLATE";
+                case "writing" -> "READING";
+                default -> "VOCABULARY";
+            };
             String dedupeKey = section + ":" + labelSnapshot;
  
             jdbc.update("""
                     INSERT INTO user_trouble_items
-                        (user_id, language, section, label_snapshot, dedupe_key, wrong_count, last_wrong_at)
-                    VALUES (?::uuid, ?, ?, ?, ?, 1, now())
+                        (user_id, language, section, reference_type, label_snapshot, dedupe_key, wrong_count, last_wrong_at)
+                    VALUES (?::uuid, ?, ?, ?, ?, ?, 1, now())
                     ON CONFLICT (user_id, language, dedupe_key) DO UPDATE SET
                         wrong_count = user_trouble_items.wrong_count + 1,
                         last_wrong_at = now(),
-                        updated_at = now()
-                    """, userId, language, section, labelSnapshot, dedupeKey);
+                        section = EXCLUDED.section,
+                        reference_type = EXCLUDED.reference_type,
+                        label_snapshot = COALESCE(EXCLUDED.label_snapshot, user_trouble_items.label_snapshot)
+                    """, userId, language, section, referenceType, labelSnapshot, dedupeKey);
         } catch (Exception ignored) {
         }
     }

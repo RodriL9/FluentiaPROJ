@@ -1,10 +1,11 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation } from 'react-router-dom';
 import BrandLogo from '../components/BrandLogo';
 import { getStoredUser } from '../api/auth';
 
 export default function AppLayout() {
   const stored = getStoredUser();
-  const logoTo = stored ? '/dashboard' : '/';
+  const { pathname } = useLocation();
+  const logoTo = pathname === '/' ? '/' : (stored ? '/dashboard' : '/');
 
   return (
     <>

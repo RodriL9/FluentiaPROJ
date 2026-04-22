@@ -96,22 +96,54 @@ public class UserSummaryController {
                 }
 
                 List<Map<String, Object>> userRows = jdbc.queryForList(
-                                "SELECT learning_goals FROM users WHERE id = ?::uuid", userId);
+                                "SELECT learning_goals, learning_language FROM users WHERE id = ?::uuid", userId);
                 if (userRows.isEmpty())
                         return Map.of("ok", false);
 
                 String existing = (String) userRows.get(0).get("learning_goals");
+                String learningLanguage = (String) userRows.get(0).get("learning_language");
                 String updated;
-                if (existing == null || existing.isBlank()) {
-                        updated = topicCode;
-                } else if (existing.contains(topicCode)) {
+                List<String> topics = normalizeGoals(existing);
+                boolean exists = topics.stream().anyMatch(t -> t.equalsIgnoreCase(topicCode));
+                if (exists) {
                         return Map.of("ok", true, "learning_goals", existing);
+                }
+                topics.add(topicCode);
+                if (topics.isEmpty()) {
+                        updated = "";
                 } else {
-                        updated = existing + "," + topicCode;
+                        updated = String.join(",", topics);
                 }
 
                 jdbc.update("UPDATE users SET learning_goals = ?, updated_at = now() WHERE id = ?::uuid",
                                 updated, userId);
+                syncUserTopics(userId, learningLanguage, topics);
+
+                return Map.of("ok", true, "learning_goals", updated);
+        }
+
+        @PostMapping("/me/topics/remove")
+        public Map<String, Object> removeTopic(@RequestBody Map<String, Object> body) {
+                String userId = (String) body.get("userId");
+                String topicCode = (String) body.get("topicCode");
+                if (userId == null || topicCode == null) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "userId and topicCode required");
+                }
+
+                List<Map<String, Object>> userRows = jdbc.queryForList(
+                                "SELECT learning_goals, learning_language FROM users WHERE id = ?::uuid", userId);
+                if (userRows.isEmpty())
+                        return Map.of("ok", false);
+
+                String existing = (String) userRows.get(0).get("learning_goals");
+                String learningLanguage = (String) userRows.get(0).get("learning_language");
+                List<String> topics = normalizeGoals(existing);
+                topics.removeIf(t -> t.equalsIgnoreCase(topicCode));
+                String updated = topics.isEmpty() ? "" : String.join(",", topics);
+
+                jdbc.update("UPDATE users SET learning_goals = ?, updated_at = now() WHERE id = ?::uuid",
+                                updated, userId);
+                syncUserTopics(userId, learningLanguage, topics);
 
                 return Map.of("ok", true, "learning_goals", updated);
         }
@@ -123,6 +155,39 @@ public class UserSummaryController {
                         return ((Number) val).intValue();
                 } catch (Exception e) {
                         return def;
+                }
+        }
+
+        private List<String> normalizeGoals(String csv) {
+                if (csv == null || csv.isBlank()) return new ArrayList<>();
+                LinkedHashSet<String> out = new LinkedHashSet<>();
+                for (String raw : csv.split(",")) {
+                        String v = raw == null ? "" : raw.trim();
+                        if (!v.isEmpty()) out.add(v);
+                }
+                return new ArrayList<>(out);
+        }
+
+        private void syncUserTopics(String userId, String learningLanguage, List<String> topicCodes) {
+                jdbc.update("DELETE FROM user_topics WHERE user_id = ?::uuid", userId);
+                if (topicCodes == null || topicCodes.isEmpty()) {
+                        return;
+                }
+                String lang = learningLanguage == null ? "" : learningLanguage.trim();
+                for (String topicCode : topicCodes) {
+                        List<Map<String, Object>> topicRows = jdbc.queryForList("""
+                                SELECT id
+                                FROM topics
+                                WHERE UPPER(code) = UPPER(?)
+                                ORDER BY CASE WHEN language = ? THEN 0 ELSE 1 END
+                                LIMIT 1
+                                """, topicCode, lang);
+                        if (topicRows.isEmpty()) continue;
+                        jdbc.update("""
+                                INSERT INTO user_topics (user_id, topic_id)
+                                VALUES (?::uuid, ?::uuid)
+                                ON CONFLICT DO NOTHING
+                                """, userId, topicRows.get(0).get("id"));
                 }
         }
 }

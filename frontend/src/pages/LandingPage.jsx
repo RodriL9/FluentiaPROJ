@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 
 const features = [
@@ -28,6 +29,13 @@ const features = [
 ];
 
 export default function LandingPage() {
+  useEffect(() => {
+    document.body.classList.add('fl-landing-body');
+    return () => {
+      document.body.classList.remove('fl-landing-body');
+    };
+  }, []);
+
   return (
     <div className="fl-landing">
       <section className="fl-hero">

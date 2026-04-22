@@ -17,6 +17,13 @@ export default function OnboardingLanguagesPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    document.body.classList.add('fl-auth-light-body');
+    return () => {
+      document.body.classList.remove('fl-auth-light-body');
+    };
+  }, []);
+
+  useEffect(() => {
     if (!stored) {
       navigate('/login', { replace: true });
     }
@@ -66,7 +73,7 @@ export default function OnboardingLanguagesPage() {
       : 'Pick the language you want Fluentia to help you learn.';
 
   return (
-    <div className="fl-auth-page">
+    <div className="fl-auth-page fl-login-page">
       <div className="fl-auth-card">
         <h1 className="fl-auth-title">{currentTitle}</h1>
         <p className="fl-auth-sub">{currentSub}</p>
@@ -109,12 +116,17 @@ export default function OnboardingLanguagesPage() {
                     key={opt.code}
                     type="button"
                     className={`fl-language-pill${learningLanguage === opt.code ? ' fl-language-pill-active' : ''}`}
-                    onClick={() => setLearningLanguage(opt.code)}
+                    onClick={() => {
+                      if (opt.code === nativeLanguage) return;
+                      setLearningLanguage(opt.code);
+                    }}
+                    disabled={opt.code === nativeLanguage}
+                    style={opt.code === nativeLanguage ? { opacity: 0.5, cursor: 'not-allowed' } : undefined}
                   >
                     <span className="fl-language-flag" aria-hidden>
                       {opt.flag}
                     </span>
-                    <span>{opt.label}</span>
+                    <span>{opt.label}{opt.code === nativeLanguage ? ' (native)' : ''}</span>
                   </button>
                 ))}
               </div>

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchPlacementQuestions, getStoredUser, setStoredUser, submitPlacementTest } from '../api/auth';
+import { speakFluent } from '../utils/speech';
 import '../styles/placement-assessment.css';
 
 function extractChoices(options) {
@@ -156,6 +157,13 @@ export default function OnboardingPlacementPage() {
   const estMinutes = useMemo(() => Math.max(1, Math.round((questions.length || 10) * 0.5)), [questions.length]);
 
   useEffect(() => {
+    document.body.classList.add('fl-auth-light-body');
+    return () => {
+      document.body.classList.remove('fl-auth-light-body');
+    };
+  }, []);
+
+  useEffect(() => {
     if (!stored) {
       navigate('/login', { replace: true });
       return;
@@ -179,15 +187,11 @@ export default function OnboardingPlacementPage() {
   if (!stored) return null;
 
   const speakQuestionAudio = () => {
-    if (!current || typeof window === 'undefined' || !window.speechSynthesis) return;
+    if (!current) return;
     const options = current.options || {};
     const text = options.audio_text || current.prompt || '';
     if (!text) return;
-    window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(String(text));
-    utter.lang = language === 'es' ? 'es-ES' : 'en-US';
-    utter.rate = 0.95;
-    window.speechSynthesis.speak(utter);
+    speakFluent(String(text), { language, rate: 0.92 });
   };
 
   const goNext = () => {

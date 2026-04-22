@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { requestPasswordReset } from '../api/auth';
 
@@ -7,8 +7,15 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
 
+  useEffect(() => {
+    document.body.classList.add('fl-auth-light-body');
+    return () => {
+      document.body.classList.remove('fl-auth-light-body');
+    };
+  }, []);
+
   return (
-    <div className="fl-auth-page">
+    <div className="fl-auth-page fl-forgot-page">
       <div className="fl-auth-card">
         <h1 className="fl-auth-title">Reset your password</h1>
         <p className="fl-auth-sub">

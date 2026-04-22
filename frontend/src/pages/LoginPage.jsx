@@ -11,6 +11,13 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    document.body.classList.add('fl-auth-light-body');
+    return () => {
+      document.body.classList.remove('fl-auth-light-body');
+    };
+  }, []);
+
+  useEffect(() => {
     if (searchParams.get('verified') === '1') {
       setInfo('Your email is verified. You can sign in below.');
     } else if (searchParams.get('verified') === '0') {
@@ -27,9 +34,9 @@ export default function LoginPage() {
   }, [searchParams]);
 
   return (
-    <div className="fl-auth-page">
+    <div className="fl-auth-page fl-login-page">
       <div className="fl-auth-card">
-        <h1 className="fl-auth-title">Welcome back</h1>
+        <h1 className="fl-auth-title">Welcome Back</h1>
         <p className="fl-auth-sub">Sign in to continue your learning journey</p>
 
         {info ? (

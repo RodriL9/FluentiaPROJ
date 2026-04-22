@@ -1,25 +1,46 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getStoredUser } from '../api/auth';
 import { fetchLessonContent, startLesson, submitLessonTest } from '../api/lessons';
+import { speakFluent } from '../utils/speech';
 
 const C = {
-  bg: '#0f0f14', surface: '#1a1a24', card: '#22222f',
-  border: '#2e2e3f', accent: '#7c6af7', accentLight: '#a899ff',
-  green: '#4ade80', yellow: '#fbbf24', red: '#f87171',
-  text: '#f0eeff', muted: '#8b8aaa', dim: '#3d3d55',
+  bg: '#eef6f3', surface: '#f1f5f9', card: '#f8fffc',
+  border: '#d8ece6', accent: '#3b82f6', accentLight: '#22c1c3',
+  green: '#22c55e', yellow: '#f59e0b', red: '#ef4444',
+  text: '#0f172a', muted: '#64748b', dim: '#d9e8e4',
 };
 
 const EMOJI_MAP = { boy: '👦', girl: '👧', man: '👨', woman: '👩', child: '👶', house: '🏠', home: '🏠', water: '💧', book: '📚', car: '🚗', dog: '🐕', cat: '🐈', sun: '☀️', apple: '🍎', bread: '🍞', table: '🪑', milk: '🥛', phone: '📱', food: '🍽️', tree: '🌳', fish: '🐟' };
 function getEmoji(keyword) { if (!keyword) return '📷'; const k = keyword.toLowerCase(); for (const [key, val] of Object.entries(EMOJI_MAP)) { if (k.includes(key)) return val; } return '📷'; }
 
 const card = { background: C.card, borderRadius: 16, border: `1px solid ${C.border}`, padding: 24 };
-const btn = (variant = 'primary') => ({ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, transition: 'all 0.15s', background: variant === 'primary' ? C.accent : 'transparent', color: variant === 'primary' ? '#fff' : C.muted, ...(variant !== 'primary' ? { border: `1px solid ${C.border}` } : {}) });
+const btn = (variant = 'primary') => ({ padding: '10px 20px', borderRadius: 10, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, transition: 'all 0.15s', background: variant === 'primary' ? 'linear-gradient(90deg, #3b82f6 0%, #22c1c3 100%)' : 'transparent', color: variant === 'primary' ? '#fff' : C.muted, ...(variant !== 'primary' ? { border: `1px solid ${C.border}` } : {}) });
+const LESSON_LECTURE_EMBEDS = {
+  1: 'https://www.youtube.com/embed/9LT9ltzFJTQ?si=J4iHuCAvwmp8_DVb',
+  2: 'https://www.youtube.com/embed/SSjmWPgpphI?si=vVqfakQpfIFystqW',
+  3: 'https://www.youtube.com/embed/rajf7Tlhnrc?si=td3VClwl2icKxOsT',
+  4: 'https://www.youtube.com/embed/jXBaAwoGaFA?si=HGl4ob8woHAb_1Q2',
+  5: 'https://www.youtube.com/embed/MP5JAL46nCM?si=3TpOyyeWdAy8aEkT',
+  6: 'https://www.youtube.com/embed/Jz69JxNznWA?si=DIuZ5Hn7ahv76bdl',
+  7: 'https://www.youtube.com/embed/3Odc-nGvKzM?si=zRoIp2x-XDgGLy9r',
+};
 
 function shuffle(arr) { return [...arr].sort(() => Math.random() - 0.5); }
+function exercisePairsFromContent(lessonNumber, content) {
+  const rows = Array.isArray(content) ? content : [];
+  if (!rows.length) return [];
+  return rows.map((item, i) => {
+    if (lessonNumber === 1) return { id: String(item.id || i), word: item.letter, translation: item.phonetic_es };
+    if (lessonNumber === 2) return { id: String(item.id || i), word: item.word, translation: item.translation };
+    if (lessonNumber === 3) return { id: String(item.id || i), word: item.spanish, translation: item.english };
+    if (lessonNumber === 4) return { id: String(item.id || i), word: item.phrase, translation: item.translation };
+    return { id: String(item.id || i), word: item.spanish || item.word, translation: item.english || item.translation };
+  }).filter((p) => p.word && p.translation);
+}
 
 // ── Mix & Match mini game ─────────────────────────────────────────────────────
-function MixMatchRound({ pairs, onComplete }) {
+function MixMatchRound({ pairs, onComplete, onWrongPair, title = '🔀 Mix & Match Round', completeLabel = 'Submit Test ✓' }) {
   const [leftOrder] = useState(() => shuffle(pairs.map(p => p.id)));
   const [rightOrder] = useState(() => shuffle(pairs.map(p => p.id)));
   const [matched, setMatched] = useState({});
@@ -40,6 +61,12 @@ function MixMatchRound({ pairs, onComplete }) {
       setPick(null);
     } else {
       setWrongIds([pick.id, id]);
+      if (onWrongPair) {
+        const left = pairs.find(x => x.id === pick.id);
+        const right = pairs.find(x => x.id === id);
+        const label = [left?.word, right?.translation].filter(Boolean).join(' ↔ ');
+        onWrongPair(label || 'mix-match pair');
+      }
       setFeedback({ kind: 'wrong', text: 'Not a pair — try again' });
       setTimeout(() => { setWrongIds([]); setFeedback(null); }, 600);
       setPick(null);
@@ -61,7 +88,7 @@ function MixMatchRound({ pairs, onComplete }) {
 
   return (
     <div style={{ ...card, marginTop: 24 }}>
-      <h3 style={{ color: C.text, margin: '0 0 6px' }}>🔀 Mix & Match Round</h3>
+      <h3 style={{ color: C.text, margin: '0 0 6px' }}>{title}</h3>
       <p style={{ color: C.muted, fontSize: 13, marginBottom: 20 }}>Tap a word then tap its translation to match them.</p>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -81,7 +108,7 @@ function MixMatchRound({ pairs, onComplete }) {
       {allMatched && (
         <div style={{ marginTop: 20, textAlign: 'center' }}>
           <div style={{ color: C.green, fontWeight: 700, fontSize: 16, marginBottom: 12 }}>🎉 All matched!</div>
-          <button onClick={onComplete} style={btn()}>Submit Test ✓</button>
+          <button onClick={onComplete} style={btn()}>{completeLabel}</button>
         </div>
       )}
     </div>
@@ -98,6 +125,7 @@ function KnowledgeTest({ lessonNumber, content, lessonTitle, user, onComplete, o
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState(null);
   const [submitting, setSubmitting] = useState(false);
+  const [mixWrongLabels, setMixWrongLabels] = useState([]);
 
   useEffect(() => {
     function gen(n, items) {
@@ -130,13 +158,20 @@ function KnowledgeTest({ lessonNumber, content, lessonTitle, user, onComplete, o
     setQuestions(qs);
     setAnswers(new Array(qs.length).fill(null));
     setMixPairs(genPairs(lessonNumber, content));
+    setMixWrongLabels([]);
   }, [lessonNumber, content]);
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
       const correct = questions.filter((q, i) => answers[i] === q.correct).length;
-      const wrongAnswers = questions.map((q, i) => answers[i] !== q.correct ? { section: q.section, label: q.label, language: user.learningLanguage || 'es' } : null).filter(Boolean);
+      const questionWrong = questions
+        .map((q, i) => answers[i] !== q.correct ? { section: q.section, label: q.label, language: user.learningLanguage || 'es' } : null)
+        .filter(Boolean);
+      const mixSection = lessonNumber === 3 ? 'grammar' : lessonNumber === 4 ? 'listening' : 'vocabulary';
+      const mixWrong = Array.from(new Set(mixWrongLabels))
+        .map((label) => ({ section: mixSection, label, language: user.learningLanguage || 'es' }));
+      const wrongAnswers = [...questionWrong, ...mixWrong];
       const res = await submitLessonTest(lessonNumber, { userId: user.id, correct, total: questions.length, wrongAnswers });
       setResult({ ...res, correct, total: questions.length });
       setSubmitted(true);
@@ -192,7 +227,7 @@ function KnowledgeTest({ lessonNumber, content, lessonTitle, user, onComplete, o
           </p>
         </div>
         {mixPairs.length >= 3
-          ? <MixMatchRound pairs={mixPairs} onComplete={handleSubmit} />
+          ? <MixMatchRound pairs={mixPairs} onComplete={handleSubmit} onWrongPair={(label) => setMixWrongLabels((prev) => [...prev, label])} />
           : <div style={{ textAlign: 'center', marginTop: 20 }}>
               <button onClick={handleSubmit} disabled={submitting} style={btn()}>
                 {submitting ? 'Submitting...' : 'Submit Test ✓'}
@@ -249,8 +284,11 @@ export default function LessonDetailPage({ lessonNumber: propNumber }) {
   const [tab, setTab] = useState('content');
   const [testResult, setTestResult] = useState(null);
   const [testKey, setTestKey] = useState(0);
+  const [exerciseMode, setExerciseMode] = useState('mix');
+  const [exerciseRound, setExerciseRound] = useState(0);
+  const [soundChoice, setSoundChoice] = useState('');
+  const [soundFeedback, setSoundFeedback] = useState('');
   const [phraseFilter, setPhraseFilter] = useState('ALL');
-  const [flipped, setFlipped] = useState(false);
   const [xp, setXp] = useState(0);
   const [streak, setStreak] = useState(0);
   const [alreadyPassed, setAlreadyPassed] = useState(false);
@@ -273,23 +311,73 @@ export default function LessonDetailPage({ lessonNumber: propNumber }) {
   }, [n, user?.id]);
 
   const speak = useCallback((text, fallback) => {
-    if (!window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const utt = new SpeechSynthesisUtterance(String(fallback || text || ''));
-    utt.lang = (user?.learningLanguage || 'es') === 'es' ? 'es-ES' : 'en-US';
-    utt.rate = 0.9;
-    window.speechSynthesis.speak(utt);
+    speakFluent(String(fallback || text || ''), {
+      language: user?.learningLanguage || 'es',
+      rate: 0.9,
+    });
   }, [user?.learningLanguage]);
 
   const content = lessonData?.content || [];
   const filteredContent = n === 4 ? (phraseFilter === 'ALL' ? content : content.filter(i => i.topic_tag === phraseFilter)) : content;
+  const exercisePairs = useMemo(() => exercisePairsFromContent(n, content), [n, content]);
+  const lectureEmbedUrl = LESSON_LECTURE_EMBEDS[n] || '';
   const total = filteredContent.length;
+  const soundTarget = useMemo(
+    () => (exercisePairs.length ? exercisePairs[exerciseRound % exercisePairs.length] : null),
+    [exercisePairs, exerciseRound]
+  );
+  const soundOptions = useMemo(() => {
+    if (!soundTarget) return [];
+    const distractors = shuffle(
+      exercisePairs
+        .filter((p) => p.id !== soundTarget.id)
+        .map((p) => p.word)
+    ).slice(0, 3);
+    return shuffle([soundTarget.word, ...distractors]);
+  }, [exercisePairs, soundTarget]);
 
   if (loading) return <div style={{ color: C.text }}><p style={{ color: C.muted }}>Loading lesson...</p></div>;
   if (error) return <div style={{ color: C.text }}><p style={{ color: C.red }}>{error}</p></div>;
 
   const { title, level } = lessonData || {};
   const item = filteredContent[idx];
+  const lessonSection = n === 3 ? 'grammar' : n === 4 ? 'listening' : 'vocabulary';
+  const lessonContentKind = n === 3 ? 'GRAMMAR' : n === 4 ? 'PHRASE' : 'VOCABULARY';
+  const recordLessonExerciseAttempt = async (correct, label) => {
+    if (!user?.id) return;
+    const baseLabel = String(label || `Lesson ${n} exercise item`).trim();
+    const topicTag = baseLabel
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '_')
+      .slice(0, 64) || `LESSON_${n}`;
+    try {
+      await fetch('/api/practice/attempt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          language: user.learningLanguage || 'es',
+          section: lessonSection,
+          correct,
+          source: `lesson-exercise:${n}`,
+          labelSnapshot: baseLabel,
+          contentKind: lessonContentKind,
+          topicTag,
+        }),
+      });
+    } catch {}
+  };
+  const handleSoundNext = () => {
+    if (!soundTarget || !soundChoice) return;
+    if (soundChoice === soundTarget.word) {
+      setExerciseRound((r) => r + 1);
+      setSoundChoice('');
+      setSoundFeedback('');
+    } else {
+      setSoundFeedback(`Not quite. Correct answer: ${soundTarget.word}`);
+      recordLessonExerciseAttempt(false, soundTarget.word);
+    }
+  };
 
   const renderContent = () => {
     if (!item) return null;
@@ -298,23 +386,29 @@ export default function LessonDetailPage({ lessonNumber: propNumber }) {
         <button onClick={() => speak(item.letter)} style={{ position: 'absolute', top: 16, right: 16, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 18, cursor: 'pointer', color: C.muted }}>🔊</button>
         <div style={{ fontSize: 96, fontWeight: 900, color: C.accentLight, lineHeight: 1 }}>{item.letter}</div>
         <div style={{ fontSize: 22, color: C.muted, marginTop: 8 }}>({item.phonetic_es})</div>
-        {item.phonetic_en && !item.phonetic_en.includes('n/a') && <div style={{ fontSize: 14, color: C.dim, marginTop: 4 }}>English: {item.phonetic_en}</div>}
-        <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} disabled={idx >= total - 1} style={{ ...btn(), position: 'absolute', bottom: 16, right: 16, opacity: idx >= total - 1 ? 0.4 : 1 }}>next →</button>
+        {item.phonetic_en && !item.phonetic_en.includes('n/a') && <div style={{ fontSize: 14, color: C.accent, marginTop: 4 }}>English: {item.phonetic_en}</div>}
+        <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} style={{ ...btn(), position: 'absolute', bottom: 16, left: 16, opacity: idx === 0 ? 0.3 : 1 }}>← Prev</button>
+        {idx < total - 1 ? (
+          <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} style={{ ...btn(), position: 'absolute', bottom: 16, right: 16 }}>next →</button>
+        ) : null}
       </div>
     );
     if (n === 2) return (
-      <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 32, position: 'relative', minHeight: 200 }}>
+      <div style={{ ...card, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 32, position: 'relative', minHeight: 200 }}>
         <button onClick={() => speak(item.word, item.audio_text)} style={{ position: 'absolute', top: 16, right: 16, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 18, cursor: 'pointer', color: C.muted }}>🔊</button>
         <div style={{ fontSize: 72, background: C.dim, borderRadius: 16, padding: 16, flexShrink: 0 }}>{getEmoji(item.image_keyword || item.word)}</div>
-        <div>
+        <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: 52, fontWeight: 900, color: C.text }}>{item.word}</div>
-          <div style={{ fontSize: 18, color: C.muted, marginTop: 4 }}>({item.translation})</div>
-          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+          <div style={{ fontSize: 18, color: C.accent, marginTop: 4 }}>({item.translation})</div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
             {item.gender && <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: item.gender === 'masculine' ? `${C.accentLight}22` : '#f472b622', color: item.gender === 'masculine' ? C.accentLight : '#f472b6', border: `1px solid ${item.gender === 'masculine' ? C.accentLight : '#f472b6'}44` }}>{item.gender === 'masculine' ? 'masculine (el)' : 'feminine (la)'}</span>}
             {item.part_of_speech && <span style={{ padding: '4px 12px', borderRadius: 20, fontSize: 12, fontWeight: 600, background: `${C.yellow}22`, color: C.yellow, border: `1px solid ${C.yellow}44` }}>{item.part_of_speech}</span>}
           </div>
         </div>
-        <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} disabled={idx >= total - 1} style={{ ...btn(), position: 'absolute', bottom: 16, right: 16, opacity: idx >= total - 1 ? 0.4 : 1 }}>next →</button>
+        <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} style={{ ...btn(), position: 'absolute', bottom: 16, left: 16, opacity: idx === 0 ? 0.3 : 1 }}>← Prev</button>
+        {idx < total - 1 ? (
+          <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} style={{ ...btn(), position: 'absolute', bottom: 16, right: 16 }}>next →</button>
+        ) : null}
       </div>
     );
     if (n === 3) {
@@ -332,8 +426,10 @@ export default function LessonDetailPage({ lessonNumber: propNumber }) {
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <button onClick={() => setFlipped(f => !f)} style={{ ...btn('ghost'), fontSize: 13 }}>{flipped ? '🇪🇸 Show Spanish' : `🔄 Flip — ${item.english}`}</button>
-            <button onClick={() => { setIdx(i => Math.min(i + 1, total - 1)); setFlipped(false); }} disabled={idx >= total - 1} style={{ ...btn(), opacity: idx >= total - 1 ? 0.4 : 1 }}>next →</button>
+            <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} style={{ ...btn(), opacity: idx === 0 ? 0.3 : 1 }}>← Prev</button>
+            {idx < total - 1 ? (
+              <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} style={btn()}>next →</button>
+            ) : null}
           </div>
         </div>
       );
@@ -347,23 +443,26 @@ export default function LessonDetailPage({ lessonNumber: propNumber }) {
           <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
             {topics.slice(0, 5).map(t => <button key={t} onClick={() => { setPhraseFilter(t); setIdx(0); }} style={{ padding: '6px 14px', borderRadius: 20, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 12, fontWeight: 600, background: phraseFilter === t ? C.accent : C.dim, color: phraseFilter === t ? '#fff' : C.muted }}>{t === 'ALL' ? 'All' : t.replace(/_ES|_EN/, '').replace(/_/g, ' ')}</button>)}
           </div>
-          <div style={{ ...card, position: 'relative', minHeight: 200 }}>
+          <div style={{ ...card, position: 'relative', minHeight: 200, paddingBottom: 84 }}>
             <button onClick={() => speak(item.phrase, item.audio_text)} style={{ position: 'absolute', top: 16, right: 16, background: 'transparent', border: `1px solid ${C.border}`, borderRadius: 8, padding: '6px 10px', fontSize: 18, cursor: 'pointer', color: C.muted }}>🔊</button>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginBottom: 20, justifyContent: 'center' }}>
               <div style={{ fontSize: 48, background: C.dim, borderRadius: 16, padding: 12 }}>💬</div>
-              <div>
+              <div style={{ textAlign: 'center' }}>
                 {item.context && <div style={{ fontSize: 11, color: C.accent, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{item.context}</div>}
                 <div style={{ fontSize: 28, fontWeight: 800, color: C.text }}>{item.phrase}</div>
-                <div style={{ fontSize: 16, color: C.muted, marginTop: 6 }}>{item.translation}</div>
+                <div style={{ fontSize: 16, color: C.accent, marginTop: 6 }}>{item.translation}</div>
               </div>
             </div>
             <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 16 }}>
-              <div style={{ fontSize: 12, color: C.muted, marginBottom: 10 }}>Word breakdown</div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, color: C.muted, marginBottom: 10, textAlign: 'center' }}>Word breakdown</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                 {wordParts.map((w, i) => <div key={i} style={{ background: C.dim, borderRadius: 10, padding: '8px 14px', textAlign: 'center' }}><div style={{ fontSize: 15, fontWeight: 700, color: C.accentLight }}>{w}</div><div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{transParts[i] ?? '—'}</div></div>)}
               </div>
             </div>
-            <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} disabled={idx >= total - 1} style={{ ...btn(), position: 'absolute', bottom: 16, right: 16, opacity: idx >= total - 1 ? 0.4 : 1 }}>next →</button>
+            <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} style={{ ...btn(), position: 'absolute', bottom: 16, left: 16, opacity: idx === 0 ? 0.3 : 1 }}>← Prev</button>
+            {idx < total - 1 ? (
+              <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} style={{ ...btn(), position: 'absolute', bottom: 16, right: 16 }}>next →</button>
+            ) : null}
           </div>
         </div>
       );
@@ -374,11 +473,13 @@ export default function LessonDetailPage({ lessonNumber: propNumber }) {
         {item.content_type && <div style={{ fontSize: 11, color: C.accent, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>{item.content_type === 'number' ? 'Number' : item.category || 'Expression'}</div>}
         {item.numeral && <div style={{ fontSize: 22, color: C.yellow, fontWeight: 700, marginBottom: 4 }}>{item.numeral}</div>}
         <div style={{ fontSize: 52, fontWeight: 900, color: C.text }}>{item.spanish}</div>
-        <div style={{ fontSize: 20, color: C.muted, marginTop: 8 }}>({item.english})</div>
+        <div style={{ fontSize: 20, color: C.accent, marginTop: 8 }}>({item.english})</div>
         {item.category && !item.content_type && <div style={{ fontSize: 13, color: C.dim, marginTop: 6 }}>{item.category}</div>}
         <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
-          <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} style={{ ...btn('ghost'), opacity: idx === 0 ? 0.3 : 1 }}>← Prev</button>
-          <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} disabled={idx >= total - 1} style={{ ...btn(), opacity: idx >= total - 1 ? 0.4 : 1 }}>next →</button>
+          <button onClick={() => setIdx(i => Math.max(0, i - 1))} disabled={idx === 0} style={{ ...btn(), opacity: idx === 0 ? 0.3 : 1 }}>← Prev</button>
+          {idx < total - 1 ? (
+            <button onClick={() => setIdx(i => Math.min(i + 1, total - 1))} style={btn()}>next →</button>
+          ) : null}
         </div>
       </div>
     );
@@ -397,6 +498,8 @@ export default function LessonDetailPage({ lessonNumber: propNumber }) {
       <button onClick={() => navigate('/dashboard/lessons')} style={{ ...btn('ghost'), marginBottom: 20, marginTop: 8, fontSize: 13 }}>← Back to Lessons</button>
       <div style={{ display: 'flex', gap: 8, marginBottom: 20 }}>
         <button onClick={() => setTab('content')} style={{ ...btn(tab === 'content' ? 'primary' : 'ghost'), fontSize: 13 }}>📖 Lesson Content</button>
+        <button onClick={() => setTab('exercises')} style={{ ...btn(tab === 'exercises' ? 'primary' : 'ghost'), fontSize: 13 }}>🎯 Exercises</button>
+        <button onClick={() => setTab('lecture')} style={{ ...btn(tab === 'lecture' ? 'primary' : 'ghost'), fontSize: 13 }}>🎬 Lecture</button>
         {(idx >= total - 1 || alreadyPassed) && (
           <button onClick={() => setTab('test')} style={{ ...btn(tab === 'test' ? 'primary' : 'ghost'), fontSize: 13 }}>
             📝 Knowledge Test {(testResult?.passed || alreadyPassed) ? '✓' : ''}
@@ -427,6 +530,79 @@ export default function LessonDetailPage({ lessonNumber: propNumber }) {
           onComplete={res => { setTestResult(res); if (res.passed && res.xpEarned > 0) setXp(v => v + res.xpEarned); }}
           onRetake={() => { setTestKey(k => k + 1); setTestResult(null); }}
         />
+      )}
+      {tab === 'exercises' && (
+        <div style={{ ...card }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+            <h3 style={{ margin: 0, color: C.text }}>Practice Exercises</h3>
+            <span style={{ color: C.muted, fontSize: 13 }}>Lesson {n}</span>
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <button onClick={() => setExerciseMode('mix')} style={{ ...btn(exerciseMode === 'mix' ? 'primary' : 'ghost'), fontSize: 13 }}>🔀 Mix & Match</button>
+            <button onClick={() => setExerciseMode('sound')} style={{ ...btn(exerciseMode === 'sound' ? 'primary' : 'ghost'), fontSize: 13 }}>🔊 Sound to Text</button>
+          </div>
+
+          {exercisePairs.length < 3 ? (
+            <p style={{ color: C.muted }}>Not enough items in this lesson for exercises yet.</p>
+          ) : exerciseMode === 'mix' ? (
+            <MixMatchRound
+              key={`mix-${exerciseRound}`}
+              pairs={shuffle(exercisePairs).slice(0, 5)}
+              title="🔀 Mix & Match Practice"
+              completeLabel="New round"
+              onComplete={() => setExerciseRound((r) => r + 1)}
+              onWrongPair={(label) => recordLessonExerciseAttempt(false, label)}
+            />
+          ) : (
+            <div style={{ ...card, marginTop: 10 }}>
+              <h4 style={{ margin: '0 0 6px', color: C.text }}>🔊 Sound to Text</h4>
+              <p style={{ marginTop: 0, color: C.muted, fontSize: 13 }}>Play the sound and choose the matching text.</p>
+              <button onClick={() => speak(soundTarget?.word, soundTarget?.word)} style={{ ...btn(), marginBottom: 14 }}>Play sound</button>
+              <div style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+                {soundOptions.map((opt) => (
+                  <button
+                    key={opt}
+                    onClick={() => setSoundChoice(opt)}
+                    style={{ padding: '12px 14px', borderRadius: 12, border: `2px solid ${soundChoice === opt ? C.accent : C.border}`, background: soundChoice === opt ? `${C.accent}22` : C.surface, color: C.text, fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer' }}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={handleSoundNext} disabled={!soundChoice} style={{ ...btn(), opacity: !soundChoice ? 0.45 : 1 }}>Next</button>
+              </div>
+              {soundFeedback && <div style={{ marginTop: 12, fontSize: 13, color: soundFeedback.startsWith('Correct') ? C.green : C.red }}>{soundFeedback}</div>}
+            </div>
+          )}
+        </div>
+      )}
+      {tab === 'lecture' && (
+        <div style={{ ...card }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ margin: 0, color: C.text }}>Lecture Video</h3>
+            <span style={{ color: C.muted, fontSize: 13 }}>Lesson {n}</span>
+          </div>
+          <p style={{ marginTop: 0, color: C.muted, fontSize: 13 }}>
+            Watch the guided explanation for this lesson.
+          </p>
+          {lectureEmbedUrl ? (
+            <div style={{ maxWidth: 760, margin: '0 auto', borderRadius: 12, overflow: 'hidden', border: `1px solid ${C.border}`, background: '#000' }}>
+              <iframe
+                src={lectureEmbedUrl}
+                title={`Lesson ${n} lecture`}
+                style={{ width: '100%', aspectRatio: '16 / 9', border: 'none', display: 'block' }}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                referrerPolicy="strict-origin-when-cross-origin"
+                allowFullScreen
+              />
+            </div>
+          ) : (
+            <div style={{ borderRadius: 12, border: `1px dashed ${C.border}`, background: C.surface, padding: 16, color: C.muted, fontSize: 13 }}>
+              Add your embed URL for Lesson {n} in <code>LESSON_LECTURE_EMBEDS</code> inside this file.
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
