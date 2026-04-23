@@ -113,7 +113,8 @@ public class DataApiController {
     public record AiConversationRequest(
             UUID userId,
             String language,
-            String userMessage) {
+            String userMessage,
+            String mode) {
     }
 
     @GetMapping("/content-overview")
@@ -956,18 +957,40 @@ public class DataApiController {
         }
         String language = normalizeString(body.language()).toLowerCase();
         if (language.isEmpty()) language = "es";
+        String mode = normalizeString(body.mode()).toLowerCase();
+        if (mode.isEmpty()) mode = "tutor";
+        boolean spanishOnlyMode = mode.equals("spanish_only");
 
         String learningLabel = language.startsWith("es") ? "Spanish" : language.startsWith("en") ? "English" : "the target language";
         String nativeLabel = language.startsWith("es") ? "English" : language.startsWith("en") ? "Spanish" : "English";
         String nativeCode = language.startsWith("es") ? "en" : language.startsWith("en") ? "es" : "en";
         String targetCode = language.startsWith("es") ? "es" : language.startsWith("en") ? "en" : language;
-
-        String systemPrompt = """
-                You are Fluentia Tutor, a friendly human-like language coach.
-                Context:
-                - Learner native language: %s (%s)
-                - Learner target language: %s (%s)
-
+        String modeInstruction = spanishOnlyMode
+                ? """
+                Conversation mode (STRICT):
+                - Reply ONLY in %s.
+                - Do not use English at all.
+                - Do not translate to English.
+                - Do not explain grammar in English.
+                - If the user writes in English, respond in %s and gently ask them to continue in %s.
+                """.formatted(learningLabel, learningLabel, learningLabel)
+                : """
+                Tutor mode:
+                - Explain in the learner's native language by default.
+                - Include target-language examples naturally in-line.
+                - If the user asks "how do I say X", give the most natural phrase first, then optionally one alternative.
+                - Add a short pronunciation tip only when useful.
+                - Prefer everyday phrasing over textbook phrasing.
+                """;
+        String styleInstruction = spanishOnlyMode
+                ? """
+                Style requirements:
+                - Sound natural, warm, and conversational.
+                - Keep it concise (usually 2-5 sentences), clear, and practical.
+                - Use only the learner target language in the reply.
+                - No English words or sentences.
+                """
+                : """
                 Style requirements:
                 - Sound natural, warm, and conversational, like a real tutor in chat.
                 - Avoid rigid templates, headings, and bullet lists unless the user asks for them.
@@ -975,21 +998,29 @@ public class DataApiController {
                 - Keep it concise (usually 2-5 sentences), clear, and practical.
                 - Explain in the learner's native language, but include target-language examples naturally in-line.
                 - Offer one gentle follow-up question sometimes, not every single message.
+                """;
 
-                Teaching behavior:
-                - If user asks "how do I say X", give the most natural phrase first, then optionally one alternative.
-                - Add a short pronunciation tip only when useful.
-                - Prefer everyday phrasing over textbook phrasing.
+        String systemPrompt = """
+                You are Fluentia Tutor, a friendly human-like language coach.
+                Context:
+                - Learner native language: %s (%s)
+                - Learner target language: %s (%s)
+                - Active mode: %s
+
+                %s
+                
+                %s
 
                 Safety:
                 - Refuse inappropriate, sexual, hateful, violent, illegal, or self-harm requests.
                 - Briefly redirect back to safe language-learning help.
-                """.formatted(nativeLabel, nativeCode, learningLabel, targetCode);
+                """.formatted(nativeLabel, nativeCode, learningLabel, targetCode, mode, styleInstruction, modeInstruction);
 
         Map<String, Object> aiResult = callOpenAiTutor(systemPrompt, msg);
         if (aiResult != null) {
             Map<String, Object> out = new LinkedHashMap<>(aiResult);
             out.put("language", language);
+            out.put("mode", mode);
             return out;
         }
 
@@ -997,12 +1028,17 @@ public class DataApiController {
         int pronunciationScore = 82;
         String grammarFeedback = "Live AI is unavailable right now. Check your OpenAI key/config and retry.";
         String pronunciationFeedback = "Fallback mode active. Once OpenAI connects, you will get personalized pronunciation coaching.";
-        String assistantReply = language.startsWith("es")
-                ? "Could not reach AI tutor. En inglés nativo: tell me what you want to say, and I will translate it to Spanish with alternatives."
-                : "No se pudo conectar al tutor IA. En tu idioma nativo: dime lo que quieres decir y lo traduzco al ingles con alternativas.";
+        String assistantReply = spanishOnlyMode
+                ? (language.startsWith("es")
+                    ? "No pude conectarme al tutor IA en este momento. Escribe tu frase en espanol y te ayudo a mejorarla."
+                    : "No pude conectarme al tutor IA en este momento. Escribe en tu idioma objetivo y te ayudo a mejorarlo.")
+                : (language.startsWith("es")
+                    ? "Could not reach AI tutor. En ingles nativo: tell me what you want to say, and I will translate it to Spanish with alternatives."
+                    : "No se pudo conectar al tutor IA. En tu idioma nativo: dime lo que quieres decir y lo traduzco al ingles con alternativas.");
         return Map.of(
                 "ok", true,
                 "language", language,
+                "mode", mode,
                 "assistantReply", assistantReply,
                 "grammarScore", grammarScore,
                 "pronunciationScore", pronunciationScore,

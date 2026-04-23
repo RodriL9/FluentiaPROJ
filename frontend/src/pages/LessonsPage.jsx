@@ -25,8 +25,8 @@ export default function LessonsPage() {
       .finally(() => setLoading(false));
   }, [user?.id]);
 
-  const completedCount = lessons.filter((lesson) => lesson.status === 'COMPLETED' || lesson.passed).length;
-  const unlockedCount = lessons.filter((lesson) => lesson.status !== 'LOCKED').length;
+  const completedCount = lessons.filter((lesson) => String(lesson.status || '').toUpperCase() === 'COMPLETED' || lesson.passed).length;
+  const unlockedCount = lessons.filter((lesson) => String(lesson.status || '').toUpperCase() !== 'LOCKED').length;
 
   const statusMeta = (lesson) => {
     const status = String(lesson.status || '').toUpperCase();
